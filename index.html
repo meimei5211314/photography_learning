@@ -8,6 +8,7 @@
   <title>光影手记 · 交互摄影学习</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="labs.css">
+  <link rel="stylesheet" href="visual-practice.css">
 </head>
 <body>
   <a class="skip-link" href="#main">跳到学习内容</a>
@@ -16,7 +17,7 @@
     <div class="sidebar-label">你的摄影学习空间</div>
     <nav id="navigation" aria-label="主要导航"></nav>
     <div class="sidebar-note"><span class="little-cross">＋</span><p>好照片，始于<br>一次有意识的观察。</p><small>少一点自动，多一点理解。</small></div>
-    <div class="side-progress"><div><span>我的学习进度</span><strong id="progress-count">0 / 12</strong></div><div class="progress-track"><span id="progress-bar"></span></div><small>每一次练习，都在积累眼光。</small></div>
+    <div class="side-progress"><div><span>已阅读课程</span><strong id="progress-count">0 / 12</strong></div><div class="progress-track"><span id="progress-bar"></span></div><small>每一次练习，都在积累眼光。</small></div>
     <button class="text-button backup-entry" data-route="settings">数据备份与使用说明 <span>↗</span></button>
     <div class="local-badge"><i></i> 本地学习 · 无需联网</div>
   </aside>
@@ -28,6 +29,6 @@
   <dialog id="search-dialog"><form method="dialog" class="dialog-top"><label for="search-input">找到你想学的知识</label><button aria-label="关闭搜索" class="icon-button">×</button></form><input id="search-input" type="search" placeholder="试试：光圈、对焦、夜景…" autocomplete="off"><div id="search-results"></div></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <noscript><p>请启用 JavaScript 以使用互动课程和本地进度功能。</p></noscript>
-  <script src="data.js"></script><script src="learning.js"></script><script src="labs.js"></script><script src="app.js"></script>
+  <script src="data.js"></script><script src="media.js"></script><script src="learning.js"></script><script src="labs.js"></script><script src="visual-practice.js"></script><script src="app.js"></script>
 </body>
 </html>

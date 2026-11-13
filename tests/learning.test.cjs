@@ -9,7 +9,8 @@ test('fresh state instances do not share mutable arrays or objects', () => {
   const first = freshState();
   first.completed.push('camera');
   first.tasks.portrait = {};
-  assert.deepEqual(freshState(), { version: 1, completed: [], tasks: {}, reviews: {}, quiz: {} });
+  first.diagnostics['depth-choice'] = false;
+  assert.deepEqual(freshState(), { version: 2, completed: [], tasks: {}, reviews: {}, quiz: {}, diagnostics: {} });
 });
 
 test('mastered cards follow 1, 3, 7, 14, 30 days and stay at 30 days', () => {
@@ -73,7 +74,7 @@ test('valid backup is copied and normalized without modifying source', () => {
 });
 
 test('unknown ids, missing or extra fields, invalid versions and wrong types are rejected', () => {
-  const candidates = [null, [], { ...freshState(), version: 2 }, { ...freshState(), extra: true },
+  const candidates = [null, [], { ...freshState(), version: 3 }, { ...freshState(), extra: true },
     { ...freshState(), completed: ['unrelated'] }, { ...freshState(), tasks: [] },
     { ...freshState(), reviews: { missing: { due: now, step: 0, lastReviewed: now } } },
     { ...freshState(), quiz: { camera: 'true' } }, { ...freshState(), completed: {} }];
@@ -96,4 +97,60 @@ test('malformed tasks, excessive notes, and dangerous keys cannot be imported', 
   assert.throws(() => validate(polluted));
   assert.equal({}.polluted, undefined);
   assert.throws(() => validate(Object.assign(Object.create({ surprise: true }), freshState())));
+});
+
+test('v1 backups migrate without losing course, task, quiz or review records', () => {
+  const old = {
+    version: 1, completed: ['camera'],
+    tasks: { portrait: { checks: [0, 1], note: '窗边观察。', completed: true } },
+    reviews: { 'card-a': { due: now + DAY, step: 2, lastReviewed: now } },
+    quiz: { camera: true, exposure: false }
+  };
+  const migrated = validate(old);
+  assert.equal(migrated.version, 2);
+  assert.deepEqual(migrated.diagnostics, {});
+  for (const key of ['completed', 'tasks', 'reviews', 'quiz']) assert.deepEqual(migrated[key], old[key]);
+  migrated.tasks.portrait.note = 'new';
+  assert.equal(old.tasks.portrait.note, '窗边观察。');
+  assert.equal(old.version, 1);
+});
+
+test('early free practice preserves the scheduled date and stage for every rating', () => {
+  const previous = { due: now + 7 * DAY, step: 3, lastReviewed: now - DAY };
+  for (const rating of ['again', 'hard', 'good']) {
+    const next = scheduleReview(previous, rating, now, { practiceOnly: true });
+    assert.deepEqual(next, previous);
+    assert.notEqual(next, previous);
+  }
+  let drill = previous;
+  for (let i = 0; i < 50; i++) drill = scheduleReview(drill, 'good', now + i * 1000, { practiceOnly: true });
+  assert.deepEqual(drill, previous);
+});
+
+test('first or due practice still starts or advances a real review appointment', () => {
+  assert.deepEqual(scheduleReview(undefined, 'good', now, { practiceOnly: true }),
+    { due: now + DAY, step: 1, lastReviewed: now });
+  const due = { due: now, step: 1, lastReviewed: now - DAY };
+  assert.deepEqual(scheduleReview(due, 'good', now, { practiceOnly: true }),
+    { due: now + 3 * DAY, step: 2, lastReviewed: now });
+  assert.equal(scheduleReview(due, 'again', now, { practiceOnly: true }).due, now + 600000);
+  for (const options of [null, [], { practiceOnly: 'true' }, { unknown: true }]) {
+    assert.throws(() => scheduleReview(due, 'good', now, options));
+  }
+});
+
+test('v2 diagnostic results preserve latest booleans while rejecting invalid or excessive keys', () => {
+  const state = freshState();
+  state.diagnostics = { 'depth-choice': false, 'shutter_2': true };
+  const validated = validate(state);
+  assert.deepEqual(validated.diagnostics, state.diagnostics);
+  validated.diagnostics['depth-choice'] = true;
+  assert.equal(state.diagnostics['depth-choice'], false);
+  for (const map of [[], { 'bad key': true }, { '../bad': true }, { 'x': 'false' }, JSON.parse('{"__proto__":true}')]) {
+    assert.throws(() => validate({ ...freshState(), diagnostics: map }));
+  }
+  const many = Object.fromEntries(Array.from({ length: 101 }, (_, i) => ['question-' + i, true]));
+  assert.throws(() => validate({ ...freshState(), diagnostics: many }));
+  const missing = freshState(); delete missing.diagnostics;
+  assert.throws(() => validate(missing));
 });

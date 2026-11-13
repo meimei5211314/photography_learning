@@ -1,8 +1,7 @@
-/* Teaching illustrations, not a physical camera or RAW renderer. No external assets. */
+/* Photo-based teaching tools. Real photographs and simplified image processing are labelled separately. */
 (function (root) {
   'use strict';
-  const MathModel = {
-    // sceneEV is scene brightness expressed as EV100. Positive return = brighter than meter reference.
+  const model = {
     exposureEV(aperture, seconds, iso, sceneEV) {
       if (![aperture, seconds, iso, sceneEV].every(Number.isFinite) || aperture <= 0 || seconds <= 0 || iso <= 0) throw new RangeError('Invalid exposure parameters');
       return sceneEV - Math.log2(aperture * aperture / seconds) + Math.log2(iso / 100);
@@ -12,316 +11,245 @@
       return 2 * Math.atan(sensorWidth / (2 * focal)) * 180 / Math.PI;
     }
   };
-  root.PhotoMath = MathModel;
-  if (typeof module !== 'undefined' && module.exports) module.exports = MathModel;
+  root.PhotoMath = model;
+  if (typeof module !== 'undefined' && module.exports) module.exports = model;
   if (typeof document === 'undefined') return;
 
   const APERTURES = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16];
   const SHUTTERS = [1 / 2000, 1 / 1000, 1 / 500, 1 / 250, 1 / 125, 1 / 60, 1 / 30, 1 / 15, 1 / 8, 1 / 4];
   const ISOS = [100, 200, 400, 800, 1600, 3200, 6400];
-  const TABS = { exposure: '曝光三要素', composition: '构图取景', focal: '焦距与视角', whitebalance: '白平衡' };
-  let host, aborter, frame, lastTime = 0, elapsed = 0, state;
-  let bgCanvas, bgContext;
+  const TABS = { compare: '实拍对比', exposure: '曝光取舍', composition: '构图裁切', focal: '焦距视角', whitebalance: '白平衡' };
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const shutterLabel = (n) => '1/' + Math.round(1 / n) + ' s';
-  const defaults = (tab) => ({ tab, aperture: 5, shutter: 4, iso: 0, scene: 13, focal: 35, kelvin: 5500, subjectX: 0.5, subjectY: 0.63, grid: true, paused: window.matchMedia('(prefers-reduced-motion: reduce)').matches });
-  const q = (s) => host.querySelector(s);
-  const button = (text, attributes = '') => `<button class="lab-button" type="button" ${attributes}>${text}</button>`;
+  const shutterLabel = seconds => `1/${Math.round(1 / seconds)} s`;
+  let host, controller, state;
+  const q = selector => host?.querySelector(selector);
+  const media = () => root.PHOTO_MEDIA || { assets: {}, comparisons: [], lessonImages: {} };
+  const comparisons = () => media().comparisons || [];
+  const asset = id => media().assets?.[id];
+  const defaults = tab => ({ tab, comparison: comparisons()[0]?.id || '', reveal: 50, explained: false, prediction: '', aperture: 5, shutter: 4, iso: 0, scene: 13, focal: 24, kelvin: 5500, zoom: 1.25, positionX: 50, positionY: 50, grid: true, reference: null, original: false });
+  const exposure = () => model.exposureEV(APERTURES[state.aperture], SHUTTERS[state.shutter], ISOS[state.iso], state.scene);
+  function sceneAsset() {
+    const m = media();
+    return asset('landscape') || asset(m.hero) || asset(m.lessonImages?.composition) || Object.values(m.assets || {})[0];
+  }
 
-  function mount(container, initialTab = 'exposure') {
+  function mount(container, initialTab = 'compare') {
     destroy();
     host = container;
-    state = defaults(TABS[initialTab] ? initialTab : 'exposure');
-    aborter = new AbortController();
-    elapsed = 0;
-    lastTime = 0;
-    bgCanvas = document.createElement('canvas');
-    bgCanvas.width = 960; bgCanvas.height = 600;
-    bgContext = bgCanvas.getContext('2d');
+    state = defaults(TABS[initialTab] ? initialTab : 'compare');
+    controller = new AbortController();
+    const options = { signal: controller.signal };
+    host.addEventListener('click', onClick, options);
+    host.addEventListener('input', onInput, options);
+    host.addEventListener('keydown', onKey, options);
+    host.addEventListener('pointerdown', onComparePointer, options);
+    host.addEventListener('pointermove', onComparePointer, options);
+    host.addEventListener('pointerup', endComparePointer, options);
+    host.addEventListener('pointercancel', endComparePointer, options);
+    host.addEventListener('load', onImageLoad, { ...options, capture: true });
+    host.addEventListener('error', onImageError, { ...options, capture: true });
     render();
-    host.addEventListener('click', onClick, { signal: aborter.signal });
-    host.addEventListener('input', onInput, { signal: aborter.signal });
-    host.addEventListener('keydown', onKey, { signal: aborter.signal });
-    host.addEventListener('pointerdown', onPointer, { signal: aborter.signal });
-    frame = requestAnimationFrame(tick);
   }
-
   function destroy() {
-    if (aborter) aborter.abort();
-    if (frame) cancelAnimationFrame(frame);
-    host = null; frame = null; aborter = null;
+    controller?.abort();
+    host = null;
+    controller = null;
+    state = null;
   }
-
-  function slider(id, name, min, max, value, explanation, endLabels, step = 1) {
-    return `<div class="lab-control"><label for="lab-${id}"><span>${name}</span><output id="lab-value-${id}" for="lab-${id}"></output></label><input id="lab-${id}" data-setting="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"><div class="lab-range-labels"><span>${endLabels[0]}</span><span>${endLabels[1]}</span></div><p>${explanation}</p></div>`;
+  function onImageLoad(event) {
+    if (event.target.tagName === 'IMG') event.target.closest('.lab-photo-stage')?.classList.add('lab-loaded');
   }
-
+  function onImageError(event) {
+    if (event.target.tagName !== 'IMG') return;
+    const stage = event.target.closest('.lab-photo-stage');
+    stage?.classList.remove('lab-loaded');
+    const status = stage?.querySelector('.lab-image-status');
+    if (status) status.textContent = '照片暂未加载。请确认 assets 文件夹与网页一起保存；文字说明和参数练习仍可使用。';
+  }
+  function button(label, attrs = '') { return `<button type="button" class="lab-button" ${attrs}>${label}</button>`; }
+  function slider(id, label, min, max, value, left, right, step = 1) {
+    return `<div class="lab-control"><label for="lab-${id}"><span>${label}</span><output id="lab-value-${id}" for="lab-${id}"></output></label><input type="range" id="lab-${id}" data-setting="${id}" min="${min}" max="${max}" step="${step}" value="${value}"><div class="lab-range-labels"><span>${left}</span><span>${right}</span></div></div>`;
+  }
+  function credit(a) {
+    if (!a) return '<p class="lab-credit">尚未载入照片资料。</p>';
+    return `<p class="lab-credit">摄影：${esc(a.author)} · <a href="${esc(a.source)}" target="_blank" rel="noopener noreferrer">原作与拍摄说明 ↗</a> · <a href="${esc(a.licenseUrl)}" target="_blank" rel="noopener noreferrer">${esc(a.license)}</a></p>`;
+  }
+  function photo(a, id = 'lab-photo', extraClass = '') {
+    if (!a) return '<div class="lab-image-status">照片资料暂不可用，请返回知识速查阅读图解。</div>';
+    return `<img draggable="false" id="${id}" class="lab-photo ${extraClass}" src="${esc(a.src)}" alt="${esc(a.alt)}" width="${a.width || 1600}" height="${a.height || 1067}" decoding="async">`;
+  }
   function render() {
     const t = state.tab;
-    const headings = {
-      exposure: ['一张照片，三种取舍。', '先预测，再拖动滑块。一次只改一个参数，观察画面与曝光表。'],
-      composition: ['挪动主体，改变叙事。', '点击画面放置人物，也可以聚焦画面后按方向键微调。'],
-      focal: ['站在原地，看得远一点。', '固定机位与传感器，只改变焦距，比较取景范围。'],
-      whitebalance: ['让白色，回到白色。', '光源固定为 5500 K 日光。尝试改变相机白平衡，看画面偏色。']
-    };
-    let controls = '';
-    if (t === 'exposure') controls = `
-      <div class="lab-scene-control"><label for="lab-scene">场景光线 <span>EV100</span></label><select id="lab-scene" data-setting="scene"><option value="15" ${state.scene === 15 ? 'selected' : ''}>晴朗日光 · 15</option><option value="13" ${state.scene === 13 ? 'selected' : ''}>明亮阴天 · 13</option><option value="10" ${state.scene === 10 ? 'selected' : ''}>室内窗边 · 10</option><option value="6" ${state.scene === 6 ? 'selected' : ''}>傍晚街道 · 6</option></select></div>
-      ${slider('aperture', '光圈', 0, 7, state.aperture, 'f 值越小，开口越大；在本场景中背景也更虚。', ['f/1.4 · 大开口', 'f/16 · 小开口'])}
-      ${slider('shutter', '快门时间', 0, 9, state.shutter, '时间越长，画面越亮；移动的骑行者拖影越明显。', ['1/2000 s · 凝固', '1/4 s · 拖影'])}
-      ${slider('iso', 'ISO', 0, 6, state.iso, '提高 ISO 会提亮输出；噪点仅为趋势示意。ISO 不增加入射光量。', ['100 · 低', '6400 · 高'])}`;
-    if (t === 'composition') controls = `<div class="lab-mini-title">取景练习</div><p class="lab-control-intro">把人物放在右下方的三分交点附近，给视线方向留出空间。然后试试居中构图，比较感受。</p>
-      ${slider('subjectX', '主体横向位置', 0.08, 0.92, state.subjectX, '左右移动主体，观察两侧留白。', ['画面左侧', '画面右侧'], 0.01)}
-      ${slider('subjectY', '主体纵向位置', 0.15, 0.85, state.subjectY, '这里允许自由摆放以观察布局，人物大小保持固定。', ['画面上方', '画面下方'], 0.01)}
-      <label class="lab-toggle"><input type="checkbox" data-setting="grid" ${state.grid ? 'checked' : ''}> 显示三分线与交点</label><div class="lab-memory"><span>构图口诀</span><strong>先找主体，再看背景，最后整理四角。</strong></div>`;
-    if (t === 'focal') controls = `${slider('focal', '镜头焦距', 24, 120, state.focal, '相机不移动：焦距越长，视角越窄，主体在画面中越大。', ['24 mm · 广角', '120 mm · 长焦'])}<div class="lab-stat"><span>水平视角 / 全画幅 36 mm</span><strong id="lab-fov"></strong></div><div class="lab-memory"><span>观察重点</span><strong>同机位改变焦距，改变取景范围；透视关系由拍摄位置决定。</strong></div><p class="lab-control-intro">实拍对照：固定站位，拍 24 mm 与 85 mm；再走远，用 85 mm 把主体拍成相同大小。第二组里，改变透视的是你的位置。</p>`;
-    if (t === 'whitebalance') controls = `${slider('kelvin', '相机白平衡', 2500, 10000, state.kelvin, '固定日光下，设得更低会偏蓝，设得更高会偏暖。', ['2500 K · 冷', '10000 K · 暖'], 100)}<div class="lab-white-cards"><span><i style="background:#adc6dc"></i>偏蓝</span><span><i style="background:#f6f2e7"></i>中性</span><span><i style="background:#e6b981"></i>偏暖</span></div><div class="lab-memory"><span>不要记反</span><strong>光源色温，与相机用来补偿的 K 值，不是同一个观察方向。</strong></div><p class="lab-control-intro">练习：先把画面调回中性，再故意做出温暖的黄昏感。白平衡既能校正，也能表达情绪。</p>`;
-    host.innerHTML = `<section class="lab-root" aria-label="交互相机实验室"><div class="lab-tabs" role="tablist" aria-label="实验类型">${Object.entries(TABS).map(([key, text]) => `<button type="button" role="tab" aria-selected="${t === key}" aria-controls="lab-panel" id="lab-tab-${key}" data-tab="${key}" class="lab-tab ${t === key ? 'is-active' : ''}">${text}</button>`).join('')}</div>
-      <div id="lab-panel" role="tabpanel" aria-labelledby="lab-tab-${t}"><div class="lab-intro"><div><span class="lab-eyebrow">PLAY · OBSERVE · UNDERSTAND</span><h2>${headings[t][0]}</h2><p>${headings[t][1]}</p></div>${button('↺ 重置参数', 'data-action="reset"')}</div>
-      <div class="lab-workspace"><div class="lab-view"><div class="lab-view-header"><span><i></i> LIVE VIEW <small>教学示意</small></span>${t === 'exposure' ? button(state.paused ? '▷ 播放运动' : 'Ⅱ 暂停运动', 'data-action="pause"') : '<span class="lab-fixed">固定机位</span>'}</div><div class="lab-canvas-wrap"><canvas id="lab-canvas" width="960" height="600" role="img" aria-label="山湖风景与骑行者的教学示意画面" ${t === 'composition' ? 'tabindex="0" aria-describedby="lab-canvas-help"' : ''}></canvas><div class="lab-viewfinder lab-viewfinder-tl"></div><div class="lab-viewfinder lab-viewfinder-tr"></div><div class="lab-viewfinder lab-viewfinder-bl"></div><div class="lab-viewfinder lab-viewfinder-br"></div><span class="lab-scene-label">FIELD STUDY / 001</span></div>
-      <div class="lab-view-footer" id="lab-view-footer"></div>
-      ${t === 'exposure' ? '<div class="lab-meter"><div class="lab-meter-heading"><span>相对示意测光基准</span><strong id="lab-ev"></strong></div><div class="lab-meter-track"><span id="lab-meter-needle"></span><i></i></div><div class="lab-meter-labels"><span>−3 EV · 暗</span><span>0</span><span>+3 EV · 亮</span></div></div>' : ''}
-      <p class="lab-canvas-help" id="lab-canvas-help">${t === 'composition' ? '点击画面或使用下面的滑块移动人物。画面获得键盘焦点后可用方向键移动，按 Shift 加速。三分法是工具，不是好照片的判分标准。' : '所有景物均由代码绘制。画面变化用于比较趋势，不用于预测真实相机成片。'}</p></div><aside class="lab-controls" aria-label="实验参数">${controls}</aside></div>
-      <div class="lab-observation"><span class="lab-observation-icon">↗</span><div><h3>这次变化告诉你什么？</h3><p id="lab-feedback" aria-live="polite"></p></div></div>
-      <div class="lab-bottom"><div class="lab-challenge"><span class="lab-eyebrow">TRY THIS / 小挑战</span><h3>${t === 'exposure' ? '让骑行者清晰，又保留正常亮度。' : t === 'composition' ? '用留白，引导看照片的人。' : t === 'focal' ? '不走近，也能突出主体吗？' : '给同一张照片，两种情绪。'}</h3><p>${t === 'exposure' ? '保持明亮阴天，先将快门调到 1/500 s 或更快；再用光圈或 ISO 把曝光表调回 ±0.5 EV。完成后，说出你做出的取舍。' : t === 'composition' ? '分别把人物放在中心、左下三分点、右下三分点。哪一张更平衡？哪一张让你想看向远方？没有唯一答案。' : t === 'focal' ? '比较 24、50、85 mm，数一数画面里消失了哪些背景元素。试着用一句话解释“长焦更容易整理背景”。' : '分别设置 3500 K 和 7500 K，再回到 5500 K。解释为什么较高的相机 K 值在同一光源下会让画面更暖。'}</p>${t === 'exposure' ? button('检查我的设置', 'data-action="check"') : ''}<p id="lab-check-result" class="lab-check-result" aria-live="polite"></p></div><div class="lab-limit"><h3>把实验带回真实相机</h3><p>${t === 'exposure' ? '这里固定主体距离、镜头和对焦位置。虚化也受焦距、距离等影响；实际噪声取决于入射光量、传感器与处理。场景 EV 值是练习设定。曝光表归零只是测光建议，创作意图可以不同。' : t === 'focal' ? '本图是固定机位的画面裁切示意，水平视角按全画幅宽度 36 mm 计算。没有模拟镜头畸变、景深或不同镜头的光学特性。APS-C 的相同焦距视角更窄。' : t === 'whitebalance' ? '这里使用简化的暖冷色覆盖，未模拟光谱、色彩管理或绿—品红色调轴。真实混合光源未必能靠一个 K 值全部校正；可用灰卡和 RAW 提高调整余地。' : '真实拍摄时通过站位与取景调整构图；本实验只做平面布局。还要检查背景干扰、地平线、人物视线和画面边缘。'}</p><a href="${t === 'focal' ? 'https://www.sony.com/electronics/support/articles/00268239' : t === 'whitebalance' ? 'https://www.nikonusa.com/learn-and-explore/c/tips-and-techniques/setting-white-balance' : t === 'composition' ? 'https://en.nikon.ca/learn-and-explore/c/tips-and-techniques/5-easy-composition-guidelines' : 'https://www.nikonusa.com/learn-and-explore/c/tips-and-techniques/a-basic-look-at-the-basics-of-exposure'}" target="_blank" rel="noopener noreferrer">延伸阅读 · ${t === 'focal' ? 'Sony 镜头基础' : t === 'whitebalance' ? 'Nikon 白平衡' : t === 'composition' ? 'Nikon 构图指南' : 'Nikon 曝光基础'} ↗</a></div></div></div></section>`;
+    host.innerHTML = `<section class="lab-root" aria-label="真实照片互动实验室"><div class="lab-tabs" role="tablist" aria-label="实验类型">${Object.entries(TABS).map(([key, label]) => `<button type="button" role="tab" id="lab-tab-${key}" data-tab="${key}" aria-selected="${key === t}" aria-controls="lab-panel" tabindex="${key === t ? 0 : -1}" class="lab-tab ${key === t ? 'is-active' : ''}">${label}</button>`).join('')}</div><div id="lab-panel" role="tabpanel" aria-labelledby="lab-tab-${t}">${t === 'compare' ? comparePanel() : experimentPanel()}</div></section>`;
     update();
+    host.querySelectorAll('img').forEach(img => { if (img.complete && img.naturalWidth) img.closest('.lab-photo-stage')?.classList.add('lab-loaded'); });
   }
-
-  function onClick(e) {
-    const tab = e.target.closest('[data-tab]');
-    if (tab) { state.tab = tab.dataset.tab; render(); q(`#lab-tab-${state.tab}`).focus(); return; }
-    const action = e.target.closest('[data-action]')?.dataset.action;
-    if (action === 'reset') { state = defaults(state.tab); elapsed = 0; render(); q('[data-action="reset"]').focus(); }
-    if (action === 'pause') { state.paused = !state.paused; e.target.closest('button').textContent = state.paused ? '▷ 播放运动' : 'Ⅱ 暂停运动'; }
+  function comparePanel() {
+    const list = comparisons();
+    const c = list.find(item => item.id === state.comparison) || list[0];
+    if (!c) return '<div class="lab-empty"><h2>实拍素材正在准备</h2><p>当前未找到本地对照照片。可以先进入曝光取舍，练习参数之间的配合。</p></div>';
+    state.comparison = c.id;
+    const a = asset(c.assetId);
+    const vertical = c.layout === 'vertical-pair';
+    const layoutClass = vertical ? 'lab-vertical-source' : 'lab-horizontal-source';
+    const before = c.beforeLabel || '照片 A', after = c.afterLabel || '照片 B';
+    const title = c.title || '同一场景，比较真实变化';
+    const topic = c.assetId === 'light' ? 'light' : 'depth';
+    const lesson = topic === 'light' ? 'light' : 'aperture';
+    return `<div class="lab-intro"><div><span class="lab-eyebrow">实拍拼接 / 观察 → 比较 → 解释</span><h2>${esc(title)}</h2><p>照片的区别，比参数的名字更值得先记住。</p></div>${button('↺ 重置观察', 'data-action="reset"')}</div>
+      <div class="lab-comparison-choices" aria-label="选择对照案例">${list.map(item => button(esc(item.title), `data-comparison="${esc(item.id)}" aria-pressed="${item.id === c.id}"`)).join('')}</div>
+      <div class="lab-compare-layout"><div class="lab-compare-main"><div class="lab-photo-stage lab-compare-stage" style="--photo-ratio:${Number(c.aspect) || 1.45}" role="img" aria-label="${esc(`${title}，左侧显示${before}，右侧显示${after}，可用下方滑杆改变分界`)}"><div class="lab-compare-layer lab-after ${layoutClass}">${photo(a, 'lab-after-image')}</div><div class="lab-compare-layer lab-before ${layoutClass}" id="lab-compare-before">${photo(a, 'lab-before-image')}</div>${c.assetId === 'bokeh' ? '<span class="lab-source-label-mask" aria-hidden="true">景深对照</span>' : ''}<span class="lab-photo-badge lab-photo-badge-left">${esc(before)}</span><span class="lab-photo-badge lab-photo-badge-right">${esc(after)}</span><div class="lab-compare-divider" id="lab-compare-divider"><span>↔</span></div><span class="lab-image-status">正在载入实拍照片…</span></div>
+      <div class="lab-compare-slider">${slider('reveal', '拖动照片或滑杆，比较同一位置', 0, 100, state.reveal, `← ${before}`, `${after} →`)}<div class="lab-inline-buttons">${button('只看左侧结果', 'data-action="before"')}${button('各看一半', 'data-action="half"')}${button('只看右侧结果', 'data-action="after"')}</div></div>${credit(a)}<p class="lab-source-note">${esc(c.description || a?.note || '')} 两侧来自原图的不同区域，边框与轻微构图差异予以保留；不是像素级配准实验。${c.assetId === 'bokeh' ? ' 为避免左右原片文字拼成错误参数，界面遮挡了顶部中央的原图 f 值文字；请看上方两侧独立标签。' : ''} ${a ? `<a href="${esc(a.src)}" target="_blank" rel="noopener noreferrer">查看完整原图 ↗</a>` : ''}</p></div>
+      <aside class="lab-observe-card"><span class="lab-step">01 / 先找证据</span><h3>${topic === 'light' ? '先看阴影，再看颜色。' : '先看主角，再看远处。'}</h3><p>${topic === 'light' ? '找到水果下方的阴影边缘。哪一张过渡更柔和？再比较反光的位置与大小。' : '先找两张都清楚的前景主体，再看它后面的物体。哪张背景细节更容易辨认？'}</p><span class="lab-step">02 / 做出预测</span><p>${topic === 'light' ? '如果想让阴影边缘更柔和，你会优先改变什么？' : '想让更多前后细节同时可辨认，在其他条件相近时，你会先尝试什么？'}</p><div class="lab-predictions">${(topic === 'light' ? [['a','增大主体看到的光源面积'],['b','只提高 ISO']] : [['a','缩小光圈（提高 f 值）'],['b','只提高 ISO']]).map(([value,label]) => button(label, `data-prediction="${value}" aria-pressed="${state.prediction === value}"`)).join('')}</div><p class="lab-prediction-feedback" id="lab-prediction-feedback" aria-live="polite"></p>${button(state.explained ? '收起观察提示 ↑' : '展开观察提示 ↓', 'data-action="explain" aria-expanded="'+state.explained+'"')}<div id="lab-explanation" class="lab-explanation" ${state.explained ? '' : 'hidden'}><h4>03 / 带走这个判断方法</h4><p>${topic === 'light' ? '柔光通常有渐变的阴影边缘；硬光的边缘更分明。光的软硬与光源对主体的相对大小有关，不等于亮暗。两张照片不是只变一个参数的严格标定。' : '景深描述可接受清晰的距离范围。比较前景与背景的清晰程度，别只记 f 数大小；光圈之外，对焦距离、焦距等也会影响结果。未提供参数的原图不补填虚构 f 值。'}</p><a href="#lesson/${lesson}">回到原理课，把观察说清楚 →</a></div></aside></div>
+      <div class="lab-transfer"><strong>把这次观察带到现实里</strong><p>${topic === 'light' ? '在窗边拍一只杯子，再用较小的灯直射。保持杯子不动，比较阴影边缘与表面高光，写下你愿意用哪种光来表现材质。' : '固定相机、主体、焦距与对焦位置，分别拍最大光圈和 f/8。让自动曝光或快门补偿亮度，比较背景清晰度，而不是比较明暗。'}</p><a href="#practice">打开实战任务 →</a></div>`;
+  }
+  function experimentPanel() {
+    const t = state.tab, a = sceneAsset();
+    const copy = {
+      exposure: ['曝光是选择，也是交换。', '以实拍照片作亮度参照，练习光圈、快门、ISO 的档位配合。', '亮度教学处理 · 参考参数不是原片 EXIF'],
+      composition: ['留下什么，比装进多少更重要。', '裁切真实照片，观察主体、留白和画面边缘之间的关系。', '实拍照片 · 页面裁切，不改变拍摄位置'],
+      focal: ['站在同一个位置，改变取景范围。', '用固定中心的裁切理解长焦的取景变化，区分变焦与走近。', '实拍底图 · 裁切视角示意'],
+      whitebalance: ['相同的光景，也能拥有不同情绪。', '先观察原片，再比较冷暖补偿。用语言描述颜色带来的感受。', '实拍底图 · 冷暖后期示意，非色温标定']
+    }[t];
+    let controls = '';
+    if (t === 'exposure') controls = `<div class="lab-scene-control"><label for="lab-scene">假设现场亮度 <small>EV100</small></label><select id="lab-scene" data-setting="scene"><option value="15" ${state.scene === 15 ? 'selected' : ''}>晴天 / 15</option><option value="13" ${state.scene === 13 ? 'selected' : ''}>明亮阴天 / 13</option><option value="10" ${state.scene === 10 ? 'selected' : ''}>室内窗边 / 10</option><option value="6" ${state.scene === 6 ? 'selected' : ''}>傍晚 / 6</option></select></div>${slider('aperture','光圈',0,7,state.aperture,'f/1.4 · 大开口','f/16 · 小开口')}${slider('shutter','快门时间',0,9,state.shutter,'1/2000 s','1/4 s')}${slider('iso','ISO',0,6,state.iso,'100','6400')}<div class="lab-inline-buttons">${button('保存当前设置为 A','data-action="save-a"')}${button('对照原片','data-action="original" aria-pressed="'+state.original+'"')}</div><p class="lab-control-note">这里只改变显示亮度，不制造“假景深”或“假噪点”。景深请看实拍对比，运动模糊请结合快门课。</p>`;
+    if (t === 'composition') controls = `${slider('zoom','裁切放大',1,2.5,state.zoom,'完整画面','收紧画面',0.05)}${slider('positionX','保留位置 · 左右',0,100,state.positionX,'左侧','右侧')}${slider('positionY','保留位置 · 上下',0,100,state.positionY,'上方','下方')}<label class="lab-toggle"><input type="checkbox" data-setting="grid" ${state.grid?'checked':''}>显示三分参考线</label><div class="lab-inline-buttons">${button('居中观察','data-preset="center"')}${button('保留左侧','data-preset="left"')}${button('保留右侧','data-preset="right"')}</div><p class="lab-control-note">先放大，再移动保留位置。裁切会减少像素；拍摄时可以优先通过取景完成构图。</p>`;
+    if (t === 'focal') controls = `${slider('focal','示意焦距',24,120,state.focal,'24 mm · 广角','120 mm · 长焦')}<div class="lab-focal-presets">${[24,35,50,85,120].map(n=>button(`${n} mm`,`data-focal="${n}"`)).join('')}</div><div class="lab-stat"><span>36 mm 宽传感器的理论水平视角</span><strong id="lab-fov"></strong></div><p class="lab-control-note">把完整底图当作 24 mm 的示意起点；这个设置不是在声称原图真的由 24 mm 拍摄。固定中心、同一机位，只观察取景范围。</p>`;
+    if (t === 'whitebalance') controls = `${slider('kelvin','相机 K 值方向示意',2500,10000,state.kelvin,'更低 · 偏冷','更高 · 偏暖',100)}<div class="lab-inline-buttons">${button('偏冷','data-kelvin="3500"')}${button('原片','data-kelvin="5500"')}${button('偏暖','data-kelvin="7500"')}</div><div class="lab-wb-key"><span class="lab-cold-swatch"></span><span>原片</span><span class="lab-warm-swatch"></span></div><p class="lab-control-note">5500 K 在这里仅表示“恢复原片”的示意零点。原照片没有做光源色温标定；这里用简化覆盖展示调整方向，不等同于 RAW 白平衡算法。</p>`;
+    return `<div class="lab-intro"><div><span class="lab-eyebrow">实拍底图 / 可控实验</span><h2>${copy[0]}</h2><p>${copy[1]}</p></div>${button('↺ 重置参数','data-action="reset"')}</div><div class="lab-workspace"><div class="lab-view"><div class="lab-view-header"><span>${copy[2]}</span></div><div class="lab-photo-stage lab-experiment-stage" style="--photo-ratio:${a && a.width && a.height ? a.width/a.height : 1.5}" ${t === 'composition' ? 'tabindex="0" role="group" aria-label="照片裁切区，可按方向键调整保留位置"' : ''}>${photo(a)}<div class="lab-wb-tint" id="lab-wb-tint"></div><div class="lab-grid" id="lab-grid" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="lab-image-status">正在载入实拍照片…</span><span class="lab-image-label" id="lab-image-label"></span></div><div class="lab-view-footer" id="lab-view-footer"></div>${t === 'exposure' ? '<div class="lab-meter"><div><span>相对假设测光基准</span><strong id="lab-ev"></strong></div><div class="lab-meter-track"><i></i><span id="lab-meter-needle"></span></div><div class="lab-meter-labels"><span>−3 EV</span><span>0</span><span>+3 EV</span></div></div>' : ''}${credit(a)}<div id="lab-reference" class="lab-reference" hidden></div></div><aside class="lab-controls" aria-label="实验参数">${controls}</aside></div><div class="lab-feedback"><span>观察反馈</span><p id="lab-feedback" aria-live="polite"></p></div><div class="lab-bottom"><section class="lab-challenge"><span class="lab-step">下一步 / 用自己的话解释</span><h3>${t === 'exposure' ? '亮度不变，快门更短。' : t === 'composition' ? '你保留了什么，又舍弃了什么？' : t === 'focal' ? '变焦，能替代走近吗？' : '给一张照片，写两种情绪。'}</h3><p>${t === 'exposure' ? '假设现场是明亮阴天。把快门设为 1/500 s 或更短，再用光圈或 ISO 将曝光表调回 ±0.5 EV。这个挑战是在练习档位，不是判定原照片的“正确曝光”。' : t === 'composition' ? '分别保存一张完整画面和一张收紧的构图。说出主体更明确的原因，并检查四边是否切断了重要元素。三分法是参考，不是评分标准。' : t === 'focal' ? '比较 24、50 和 85 mm 的取景。相机没有移动，透视关系仍相同。真实拍摄时再走近主体，对比背景比例，辨认机位造成的变化。' : '先用偏冷、偏暖两个按钮比较，再回到原片。描述各自让你想到的时间或情绪；不要把“看着舒服”与“准确还原”混为一谈。'}</p>${t === 'exposure' ? button('检查我的设置','data-action="check"') : ''}<p id="lab-check-result" class="lab-check-result" aria-live="polite"></p></section><section class="lab-limit"><h3>这幅图能教你什么？</h3><p>${t === 'exposure' ? '能练习曝光档位的补偿关系。不能从静态滤镜观察主体运动、真实景深、传感器噪声或高光恢复。把鼠标移到“实拍对比”，观察相机真正记录的差异。' : t === 'composition' ? '能练习取舍、留白和边缘整理。不能代替拍摄时移动机位、改变前后关系；原片中没有的信息，裁切无法补回来。' : t === 'focal' ? '能理解固定机位时焦距变长、视角变窄。不模拟镜头畸变、真实焦距 EXIF、景深或机位变化；标出的角度来自全画幅的几何公式。' : '能记住同一场景中提高相机 K 值通常会让照片更暖。实际光源色温、色调轴、混合光源与色彩管理更复杂，不能用这一层覆盖精确模拟。'}</p><a href="#lesson/${t === 'focal'?'lens':t}">回到相关课程 →</a></section></div>`;
+  }
+  function onClick(event) {
+    const target = event.target.closest('button');
+    if (!target) return;
+    if (target.dataset.tab) { state.tab = target.dataset.tab; render(); q(`#lab-tab-${state.tab}`).focus(); return; }
+    if (target.dataset.comparison) { state.comparison = target.dataset.comparison; state.reveal = 50; state.prediction = ''; state.explained = false; render(); q(`[data-comparison="${state.comparison}"]`).focus(); return; }
+    if (target.dataset.prediction) { state.prediction = target.dataset.prediction; update(); return; }
+    if (target.dataset.focal) { state.focal = Number(target.dataset.focal); q('#lab-focal').value = state.focal; update(); return; }
+    if (target.dataset.kelvin) { state.kelvin = Number(target.dataset.kelvin); q('#lab-kelvin').value = state.kelvin; update(); return; }
+    if (target.dataset.preset) {
+      state.zoom = 1.5; state.positionY = 50; state.positionX = target.dataset.preset === 'left' ? 20 : target.dataset.preset === 'right' ? 80 : 50;
+      ['zoom','positionX','positionY'].forEach(name => { q(`#lab-${name}`).value = state[name]; }); update(); return;
+    }
+    const action = target.dataset.action;
+    if (action === 'reset') { const oldComparison = state.comparison; state = defaults(state.tab); state.comparison = oldComparison; render(); q('[data-action="reset"]').focus(); return; }
+    if (['before','half','after'].includes(action)) { state.reveal = action === 'before' ? 100 : action === 'after' ? 0 : 50; q('#lab-reveal').value = state.reveal; update(); }
+    if (action === 'explain') { state.explained = !state.explained; q('#lab-explanation').hidden = !state.explained; target.setAttribute('aria-expanded',state.explained); target.textContent = state.explained ? '收起观察提示 ↑' : '展开观察提示 ↓'; }
+    if (action === 'save-a') { state.reference = { aperture: APERTURES[state.aperture], shutter: SHUTTERS[state.shutter], iso: ISOS[state.iso], ev: exposure() }; update(); }
+    if (action === 'original') { state.original = !state.original; update(); }
     if (action === 'check') {
-      const ev = MathModel.exposureEV(APERTURES[state.aperture], SHUTTERS[state.shutter], ISOS[state.iso], state.scene);
-      const pass = SHUTTERS[state.shutter] <= 1 / 500 && Math.abs(ev) <= 0.5 && state.scene === 13;
-      q('#lab-check-result').textContent = pass ? '✓ 完成！曝光在目标范围内，快门也足够短。现在解释：你用更大的光圈，还是更高的 ISO，换回了亮度？' : state.scene !== 13 ? '先把场景切回“明亮阴天”，再完成同一条件下的挑战。' : SHUTTERS[state.shutter] > 1 / 500 ? '再试一次：快门时间需要缩短到 1/500 s 或更短，然后补偿亮度。' : ev < -0.5 ? '动作已凝固，画面还偏暗：开大光圈（降低 f 值）或提高 ISO。' : '动作已凝固，画面还偏亮：缩小光圈、降低 ISO，或进一步加快快门。';
+      const ev = exposure();
+      const fastEnough = SHUTTERS[state.shutter] <= 1 / 500;
+      q('#lab-check-result').textContent = state.scene !== 13 ? '先把假设现场切回明亮阴天，再比较同一条件。' : !fastEnough ? '再试一次：快门时间先缩短到 1/500 s 或更短。' : Math.abs(ev) <= 0.5 ? '✓ 完成！快门更短、模拟亮度保持接近。现在说出代价：更大光圈通常减少景深；提高 ISO 不会增加入射光，画质还受光量与设备影响。' : ev < 0 ? '快门已足够短，当前偏暗。试着开大光圈（降低 f 值）或提高 ISO。' : '快门已足够短，当前偏亮。试着缩小光圈、降低 ISO，或进一步缩短快门。';
     }
   }
-
-  function onInput(e) {
-    const name = e.target.dataset.setting;
+  function onComparePointer(event) {
+    if (state.tab !== 'compare') return;
+    const frame = event.target.closest('.lab-compare-stage');
+    if (!frame) return;
+    if (event.type === 'pointerdown') {
+      if (event.button !== 0) return;
+      frame.setPointerCapture(event.pointerId);
+      frame.dataset.dragging = String(event.pointerId);
+    } else if (frame.dataset.dragging !== String(event.pointerId)) return;
+    const bounds = frame.getBoundingClientRect();
+    if (!bounds.width) return;
+    state.reveal = Math.round(clamp((event.clientX - bounds.left) / bounds.width * 100,0,100));
+    q('#lab-reveal').value = state.reveal;
+    update();
+  }
+  function endComparePointer(event) {
+    const frame = event.target.closest('.lab-compare-stage');
+    if (!frame || frame.dataset.dragging !== String(event.pointerId)) return;
+    if (frame.hasPointerCapture(event.pointerId)) frame.releasePointerCapture(event.pointerId);
+    delete frame.dataset.dragging;
+  }
+  function onInput(event) {
+    const name = event.target.dataset.setting;
     if (!name) return;
-    state[name] = name === 'grid' ? e.target.checked : Number(e.target.value);
+    state[name] = name === 'grid' ? event.target.checked : Number(event.target.value);
     if (q('#lab-check-result')) q('#lab-check-result').textContent = '';
     update();
   }
-
-  function onPointer(e) {
-    if (e.target.id !== 'lab-canvas' || state.tab !== 'composition') return;
-    const rect = e.target.getBoundingClientRect();
-    state.subjectX = clamp((e.clientX - rect.left) / rect.width, 0.08, 0.92);
-    state.subjectY = clamp((e.clientY - rect.top) / rect.height, 0.15, 0.85);
-    q('#lab-subjectX').value = state.subjectX;
-    q('#lab-subjectY').value = state.subjectY;
-    e.target.focus(); update();
-  }
-
-  function onKey(e) {
-    const tab = e.target.closest('[role="tab"]');
-    if (tab && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
-      e.preventDefault();
-      const keys = Object.keys(TABS), i = keys.indexOf(state.tab);
-      state.tab = e.key === 'Home' ? keys[0] : e.key === 'End' ? keys[3] : keys[(i + (e.key === 'ArrowRight' ? 1 : 3)) % 4];
+  function onKey(event) {
+    if (event.target.dataset.tab && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+      event.preventDefault();
+      const tabs = Object.keys(TABS), index = tabs.indexOf(state.tab);
+      state.tab = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs.at(-1) : tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
       render(); q(`#lab-tab-${state.tab}`).focus(); return;
     }
-    if (e.target.id !== 'lab-canvas' || !e.key.startsWith('Arrow')) return;
-    e.preventDefault();
-    const delta = e.shiftKey ? 0.05 : 0.01;
-    if (e.key === 'ArrowLeft') state.subjectX = clamp(state.subjectX - delta, 0.08, 0.92);
-    if (e.key === 'ArrowRight') state.subjectX = clamp(state.subjectX + delta, 0.08, 0.92);
-    if (e.key === 'ArrowUp') state.subjectY = clamp(state.subjectY - delta, 0.15, 0.85);
-    if (e.key === 'ArrowDown') state.subjectY = clamp(state.subjectY + delta, 0.15, 0.85);
-    q('#lab-subjectX').value = state.subjectX; q('#lab-subjectY').value = state.subjectY; update();
+    if (event.target.classList.contains('lab-experiment-stage') && state.tab === 'composition' && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
+      event.preventDefault(); const d = event.shiftKey ? 10 : 2;
+      if (event.key === 'ArrowLeft') state.positionX = clamp(state.positionX - d,0,100);
+      if (event.key === 'ArrowRight') state.positionX = clamp(state.positionX + d,0,100);
+      if (event.key === 'ArrowUp') state.positionY = clamp(state.positionY - d,0,100);
+      if (event.key === 'ArrowDown') state.positionY = clamp(state.positionY + d,0,100);
+      ['positionX','positionY'].forEach(name=> { q(`#lab-${name}`).value = state[name]; }); update();
+    }
   }
-
   function update() {
-    if (!host) return;
-    const t = state.tab;
-    const N = APERTURES[state.aperture], sec = SHUTTERS[state.shutter], iso = ISOS[state.iso];
-    const ev = MathModel.exposureEV(N, sec, iso, state.scene);
+    if (state.tab === 'compare') {
+      if (!q('#lab-compare-before')) return;
+      q('#lab-compare-before').style.clipPath = `inset(0 ${100-state.reveal}% 0 0)`;
+      q('#lab-compare-divider').style.left = `${state.reveal}%`;
+      q('#lab-value-reveal').textContent = `${state.reveal}% / ${100-state.reveal}%`;
+      q('#lab-prediction-feedback').textContent = !state.prediction ? '先作出判断，再展开观察提示。' : state.prediction === 'a' ? '✓ 方向正确。请再指着照片，说出一个可见的证据。' : 'ISO 主要改变亮度呈现，不会直接改变景深或光源的相对大小。再观察清晰范围或阴影边缘。';
+      host.querySelectorAll('[data-prediction]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.prediction === state.prediction));
+      return;
+    }
+    const t = state.tab, image = q('#lab-photo');
+    if (!image) return;
+    image.style.transform = '';
+    image.style.filter = '';
+    q('#lab-wb-tint').style.background = 'transparent';
+    q('#lab-grid').hidden = !(t === 'composition' && state.grid);
     if (t === 'exposure') {
+      const N = APERTURES[state.aperture], seconds = SHUTTERS[state.shutter], iso = ISOS[state.iso], ev = exposure();
       q('#lab-value-aperture').textContent = `f/${N}`;
-      q('#lab-value-shutter').textContent = shutterLabel(sec);
+      q('#lab-value-shutter').textContent = shutterLabel(seconds);
       q('#lab-value-iso').textContent = iso;
-      q('#lab-ev').textContent = `${ev >= 0 ? '+' : ''}${ev.toFixed(1)} EV`;
-      q('#lab-meter-needle').style.left = `${50 + clamp(ev, -3, 3) / 3 * 48}%`;
-      q('#lab-feedback').textContent = `${Math.abs(ev) <= 0.5 ? '亮度接近示意测光基准。' : ev < 0 ? '当前画面偏暗，可以增加进光量或提高 ISO。' : '当前画面偏亮，可以减少进光量或降低 ISO。'} ${N <= 2.8 ? '大光圈让背景明显虚化。' : N >= 8 ? '较小光圈让背景更易辨认。' : '中等光圈保留了部分背景细节。'} ${sec >= 1 / 60 ? '慢快门记录了移动轨迹。' : '短曝光时间更容易凝固运动。'}${iso >= 1600 ? '高 ISO 下增加了可见噪点示意。' : ''}`;
-      q('#lab-view-footer').innerHTML = `<span><small>APERTURE</small>f/${N}</span><span><small>SHUTTER</small>${shutterLabel(sec)}</span><span><small>ISO</small>${iso}</span><span class="lab-mode">M</span>`;
-      q('#lab-canvas').setAttribute('aria-label', `曝光示意：光圈 f/${N}，快门 ${shutterLabel(sec)}，ISO ${iso}，相对测光 ${ev.toFixed(1)} EV。${q('#lab-feedback').textContent}`);
-    } else if (t === 'composition') {
-      q('#lab-value-subjectX').textContent = `${Math.round(state.subjectX * 100)}%`;
-      q('#lab-value-subjectY').textContent = `${Math.round(state.subjectY * 100)}%`;
-      const nearThird = [1 / 3, 2 / 3].some(x => Math.abs(x - state.subjectX) < 0.055) && [1 / 3, 2 / 3].some(y => Math.abs(y - state.subjectY) < 0.065);
-      q('#lab-feedback').textContent = nearThird ? '主体靠近三分交点。再观察画面另一侧是否有元素呼应，避免只追求“对准线”。' : Math.abs(state.subjectX - 0.5) < 0.06 ? '主体居中，强调稳定和直接。试着检查左右是否平衡，居中同样可以形成有力构图。' : `主体偏${state.subjectX < 0.5 ? '左' : '右'}，另一侧留白更多。想想这片留白能否交代环境或引导视线。`;
-      q('#lab-view-footer').innerHTML = `<span><small>SUBJECT</small>${Math.round(state.subjectX * 100)}% / ${Math.round(state.subjectY * 100)}%</span><span><small>GRID</small>${state.grid ? '三分法参考线' : '自由观察'}</span>`;
-      q('#lab-canvas').setAttribute('aria-label', `可移动人物的构图示意，横向 ${Math.round(state.subjectX * 100)}%，纵向 ${Math.round(state.subjectY * 100)}%。`);
-    } else if (t === 'focal') {
-      const fov = MathModel.horizontalFov(state.focal);
-      q('#lab-value-focal').textContent = `${state.focal} mm`;
-      q('#lab-fov').textContent = `${fov.toFixed(1)}°`;
-      q('#lab-feedback').textContent = state.focal < 35 ? '广角容纳更多环境，前景与背景都能参与叙事。注意画面边缘的无关元素。' : state.focal <= 60 ? '中等焦距收窄了取景范围。背景与主体仍保持同机位的透视关系。' : '长焦把更窄的一部分场景填满画面，背景元素减少，主体更突出。相机没移动，透视关系也没有改变。';
-      q('#lab-view-footer').innerHTML = `<span><small>FOCAL LENGTH</small>${state.focal} mm</span><span><small>HORIZONTAL FOV</small>${fov.toFixed(1)}°</span><span><small>SENSOR</small>36 mm 宽</span>`;
-    } else {
-      q('#lab-value-kelvin').textContent = `${state.kelvin} K`;
-      q('#lab-feedback').textContent = Math.abs(state.kelvin - 5500) <= 300 ? '接近日光基准，灰白色区域接近中性。真实拍摄可以借助中性灰卡确认。' : state.kelvin < 5500 ? '你设置的 K 值低于当前日光：相机按较暖光源去补偿，画面因此偏蓝。' : '你设置的 K 值高于当前日光：相机按较冷光源去补偿，画面因此偏暖。';
-      q('#lab-view-footer').innerHTML = `<span><small>LIGHT SOURCE</small>5500 K 日光</span><span><small>CAMERA WB</small>${state.kelvin} K</span><span><small>TINT</small>${Math.abs(state.kelvin - 5500) <= 300 ? '接近中性' : state.kelvin < 5500 ? '偏冷' : '偏暖'}</span>`;
+      image.style.filter = state.original ? 'none' : `brightness(${clamp(Math.pow(2, ev),0.025,8)})`;
+      q('#lab-ev').textContent = `${ev>=0?'+':''}${ev.toFixed(1)} EV`;
+      q('#lab-meter-needle').style.left = `${50 + clamp(ev,-3,3)/3*49}%`;
+      q('#lab-image-label').textContent = state.original ? '原片参照 · 非模拟结果' : '亮度教学处理';
+      q('[data-action="original"]').setAttribute('aria-pressed',state.original);
+      q('[data-action="original"]').textContent = state.original ? '返回模拟亮度' : '对照原片';
+      q('#lab-view-footer').innerHTML = `<span><small>假设光圈</small>f/${N}</span><span><small>假设快门</small>${shutterLabel(seconds)}</span><span><small>假设 ISO</small>${iso}</span>`;
+      q('#lab-feedback').textContent = `${Math.abs(ev)<0.5?'接近参考亮度。':ev<0?'相对参考偏暗。':'相对参考偏亮。'} ${seconds<=1/500?'若现场有运动主体，短曝光更有利于凝固动作。':'如果主体运动，较长时间可能留下拖影。'} ${N<4?'大光圈通常让景深变浅，但本图不伪造虚化。':''} ${iso>=1600?'提高 ISO 不增加入射光；本图未模拟噪点。':''}`;
+      if (state.reference) {
+        const r = state.reference, a = sceneAsset();
+        q('#lab-reference').hidden = false;
+        q('#lab-reference').innerHTML = `<div class="lab-reference-photo" style="aspect-ratio:${a.width/a.height}"><img src="${esc(a.src)}" alt="已保存的 A 设置亮度参照" width="320" height="213" style="filter:brightness(${clamp(Math.pow(2,r.ev),0.025,8)})"></div><div><strong>已保存 A / 参数对照</strong><p>f/${r.aperture} · ${shutterLabel(r.shutter)} · ISO ${r.iso}</p><p>A：${r.ev.toFixed(1)} EV → 当前：${ev.toFixed(1)} EV</p><p>亮度相近，也可能有不同的运动与景深取舍。</p></div>`;
+      }
     }
-    draw();
-  }
-
-  function path(ctx, points, fill, stroke, width = 1) {
-    ctx.beginPath(); points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-    if (fill) { ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); }
-  }
-
-  function circle(ctx, x, y, r, fill, stroke, width = 1) {
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); }
-  }
-
-  function landscape(ctx) {
-    const sky = ctx.createLinearGradient(0, 0, 0, 600);
-    sky.addColorStop(0, '#b4cbd2'); sky.addColorStop(0.65, '#e4e5d5'); sky.addColorStop(1, '#eee8d3');
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, 960, 600);
-    circle(ctx, 738, 105, 43, '#f7efd0');
-    ctx.fillStyle = '#e6ece5';
-    [[120, 93, 94, 10], [207, 106, 130, 6], [470, 60, 70, 5]].forEach(([x, y, w, h]) => { ctx.beginPath(); ctx.ellipse(x, y, w, h, 0, 0, Math.PI * 2); ctx.fill(); });
-    path(ctx, [[0, 320], [80, 252], [145, 280], [280, 112], [400, 268], [505, 190], [610, 290], [737, 153], [855, 260], [960, 200], [960, 430], [0, 430]], '#a7b8b0');
-    path(ctx, [[211, 198], [280, 112], [344, 194], [300, 177], [272, 191], [252, 180]], '#e2e5d8');
-    path(ctx, [[686, 218], [737, 153], [802, 219], [759, 201], [730, 215]], '#e2e5d8');
-    path(ctx, [[0, 346], [90, 299], [170, 345], [294, 248], [419, 333], [570, 278], [690, 340], [820, 252], [960, 321], [960, 450], [0, 450]], '#718d7b');
-    path(ctx, [[0, 382], [110, 346], [250, 369], [378, 328], [531, 376], [660, 348], [820, 379], [960, 333], [960, 450], [0, 450]], '#416854');
-    const lake = ctx.createLinearGradient(0, 370, 0, 550);
-    lake.addColorStop(0, '#8fb1ac'); lake.addColorStop(1, '#b9c8ad');
-    path(ctx, [[0, 400], [350, 381], [640, 391], [960, 376], [960, 566], [0, 566]], lake);
-    ctx.globalAlpha = 0.3;
-    for (let i = 0; i < 24; i++) { const y = 398 + i * 5; path(ctx, [[120 + (i * 73) % 330, y], [530 + (i * 41) % 320, y]], null, '#eff2db', 1); }
-    ctx.globalAlpha = 1;
-    path(ctx, [[0, 470], [170, 443], [345, 489], [590, 470], [810, 448], [960, 462], [960, 600], [0, 600]], '#89966c');
-    path(ctx, [[0, 526], [150, 490], [350, 514], [625, 503], [805, 484], [960, 488], [960, 522], [800, 514], [630, 536], [350, 547], [150, 524], [0, 566]], '#d6c4a0');
-    for (let i = 0; i < 10; i++) {
-      const x = 14 + i * 44, y = 396 - Math.sin(i * 1.6) * 13;
-      path(ctx, [[x, y], [x + 13, y - 47 - (i % 3) * 9], [x + 26, y]], '#325a48');
+    if (t === 'composition') {
+      q('#lab-value-zoom').textContent = `${state.zoom.toFixed(2)}×`;
+      q('#lab-value-positionX').textContent = `${state.positionX}%`;
+      q('#lab-value-positionY').textContent = `${state.positionY}%`;
+      image.style.transform = `scale(${state.zoom})`;
+      image.style.transformOrigin = `${state.positionX}% ${state.positionY}%`;
+      q('#lab-image-label').textContent = '裁切练习 · 拍摄机位不变';
+      q('#lab-view-footer').innerHTML = `<span><small>裁切倍率</small>${state.zoom.toFixed(2)}×</span><span><small>保留位置</small>${state.positionX}% / ${state.positionY}%</span>`;
+      q('#lab-feedback').textContent = state.zoom === 1 ? '当前显示完整底图；位置滑杆在没有裁切时不会改变画面。先放大一点，再选择保留位置。' : `你收紧了画面，正在保留${state.positionX<35?'偏左':state.positionX>65?'偏右':'中间'}的区域。检查主体是否明确、地平线是否合理，以及四边有没有被截断的重要元素。`;
     }
-    // Distant lookout hut and a white neutral reference wall.
-    ctx.fillStyle = '#eeeade'; ctx.fillRect(755, 344, 58, 47);
-    path(ctx, [[746, 345], [784, 321], [823, 345]], '#364b42');
-    ctx.fillStyle = '#566b64'; ctx.fillRect(780, 365, 13, 26);
-    ctx.fillStyle = '#9aa39a'; ctx.fillRect(762, 354, 10, 10); ctx.fillRect(797, 354, 10, 10);
-    // Foreground grasses.
-    for (let i = 0; i < 28; i++) {
-      const x = (i * 91) % 960, y = 571 + (i * 17) % 40;
-      path(ctx, [[x - 7, y - 16], [x, y], [x + 5, y - 23]], null, '#5c7450', 2);
-    }
-  }
-
-  function cyclist(ctx, x, y, alpha = 1) {
-    ctx.save(); ctx.translate(x, y); ctx.globalAlpha *= alpha;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    circle(ctx, -28, 23, 22, null, '#273f37', 4);
-    circle(ctx, 36, 23, 22, null, '#273f37', 4);
-    path(ctx, [[-28, 23], [-10, -10], [10, 23], [-28, 23], [23, -10], [36, 23]], null, '#dfe1b5', 4);
-    path(ctx, [[23, -10], [18, -23], [29, -23]], null, '#273f37', 3);
-    path(ctx, [[-10, -10], [-13, -21], [-21, -21]], null, '#273f37', 3);
-    path(ctx, [[-6, -27], [10, -6], [0, 22]], null, '#273f37', 9);
-    path(ctx, [[-6, -27], [-16, -3], [-9, 20]], null, '#40594b', 9);
-    path(ctx, [[-8, -28], [0, -55], [20, -38], [24, -23]], null, '#dace65', 15);
-    path(ctx, [[4, -51], [20, -36], [24, -23]], null, '#d3b08c', 6);
-    circle(ctx, 9, -69, 11, '#d3b08c');
-    path(ctx, [[-2, -72], [1, -80], [17, -80], [23, -70]], '#f5efcf');
-    ctx.restore();
-  }
-
-  function person(ctx, x, y) {
-    ctx.save(); ctx.translate(x, y);
-    ctx.lineCap = 'round';
-    ctx.fillStyle = 'rgba(35,59,47,.17)'; ctx.beginPath(); ctx.ellipse(2, 47, 18, 5, 0, 0, Math.PI * 2); ctx.fill();
-    path(ctx, [[-7, 17], [-11, 44]], null, '#2b453a', 8);
-    path(ctx, [[7, 17], [14, 44]], null, '#2b453a', 8);
-    path(ctx, [[-13, -13], [10, -13], [14, 19], [-15, 19]], '#e2b85a');
-    path(ctx, [[-13, -8], [-22, 15]], null, '#d6b38d', 6);
-    path(ctx, [[12, -8], [21, 12]], null, '#d6b38d', 6);
-    circle(ctx, 0, -27, 11, '#d6b38d');
-    path(ctx, [[-14, -30], [-8, -40], [6, -40], [16, -30]], '#e8e4ce');
-    ctx.restore();
-  }
-
-  function draw() {
-    const canvas = q('#lab-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d'), t = state.tab;
-    ctx.clearRect(0, 0, 960, 600);
-    ctx.fillStyle = '#89966c'; ctx.fillRect(0, 0, 960, 600);
-    bgContext.clearRect(0, 0, 960, 600);
-    landscape(bgContext);
-    ctx.save();
     if (t === 'focal') {
-      const zoom = state.focal / 24;
-      // Crop the same perspective projection around a fixed point.
-      ctx.translate(480, 300); ctx.scale(zoom, zoom); ctx.translate(-480, -465);
-    }
-    if (t === 'exposure') {
-      const blur = Math.max(0, (8 - APERTURES[state.aperture]) * 0.65);
-      ctx.filter = `blur(${blur}px)`;
-    }
-    ctx.drawImage(bgCanvas, -6, -6, 972, 612); ctx.filter = 'none';
-    if (t === 'composition') person(ctx, state.subjectX * 960, state.subjectY * 600);
-    else {
-      const x = t === 'exposure' ? 480 + Math.sin(elapsed * 0.00035) * 95 : 480;
-      if (t === 'exposure') {
-        const trail = clamp(SHUTTERS[state.shutter] * 550, 0, 135);
-        if (trail > 3) for (let i = 9; i >= 1; i--) cyclist(ctx, x - trail * i / 9, 475, 0.055 + 0.12 * (1 - i / 10));
-      }
-      cyclist(ctx, x, 475);
-    }
-    ctx.restore();
-    if (t === 'exposure') {
-      const ev = MathModel.exposureEV(APERTURES[state.aperture], SHUTTERS[state.shutter], ISOS[state.iso], state.scene);
-      if (ev < 0) { ctx.fillStyle = `rgba(10,19,23,${1 - Math.pow(2, Math.max(-8, ev) / 1.7)})`; ctx.fillRect(0, 0, 960, 600); }
-      else if (ev > 0) { ctx.fillStyle = `rgba(255,253,241,${1 - Math.pow(2, -Math.min(8, ev) / 2.2)})`; ctx.fillRect(0, 0, 960, 600); }
-      const noiseStrength = state.iso * 0.026;
-      if (noiseStrength) {
-        let seed = 27713;
-        for (let i = 0; i < 6500; i++) {
-          seed = (seed * 16807) % 2147483647;
-          const x = seed % 960;
-          seed = (seed * 16807) % 2147483647;
-          const y = seed % 600;
-          ctx.fillStyle = i % 2 ? `rgba(255,255,255,${noiseStrength})` : `rgba(0,0,0,${noiseStrength})`;
-          ctx.fillRect(x, y, 2, 2);
-        }
-      }
+      q('#lab-value-focal').textContent = `${state.focal} mm`;
+      q('#lab-fov').textContent = `${model.horizontalFov(state.focal).toFixed(1)}°`;
+      image.style.transform = `scale(${state.focal/24})`; image.style.transformOrigin = '50% 50%';
+      q('#lab-image-label').textContent = '同机位裁切 · 焦距为示意值';
+      q('#lab-view-footer').innerHTML = `<span><small>示意焦距</small>${state.focal} mm</span><span><small>理论水平视角</small>${model.horizontalFov(state.focal).toFixed(1)}°</span>`;
+      q('#lab-feedback').textContent = state.focal <= 35 ? '较宽的视角保留更多环境。想一想：哪些背景信息帮助交代故事，哪些是干扰？' : '视角收窄，画面中的景物变大。这里只裁切同一张照片，所以前后景的透视关系没有改变。';
+      host.querySelectorAll('[data-focal]').forEach(b=>b.setAttribute('aria-pressed',Number(b.dataset.focal)===state.focal));
     }
     if (t === 'whitebalance') {
       const delta = state.kelvin - 5500;
-      ctx.fillStyle = delta < 0 ? `rgba(52,118,221,${Math.min(0.4, -delta / 8500)})` : `rgba(247,161,48,${Math.min(0.4, delta / 12500)})`;
-      ctx.fillRect(0, 0, 960, 600);
-      // A neutral gray card gives a stable comparison object.
-      ctx.fillStyle = '#e5e1d7'; ctx.fillRect(45, 54, 98, 60);
-      ctx.fillStyle = delta < 0 ? `rgba(52,118,221,${Math.min(0.5, -delta / 7000)})` : `rgba(247,161,48,${Math.min(0.5, delta / 9500)})`; ctx.fillRect(45, 54, 98, 60);
-      ctx.font = '15px sans-serif'; ctx.fillStyle = '#334f43'; ctx.fillText('中性参考', 64, 91);
-    }
-    if (t === 'composition' && state.grid) {
-      ctx.strokeStyle = 'rgba(255,255,242,.78)'; ctx.lineWidth = 1.4; ctx.setLineDash([8, 6]);
-      [320, 640].forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 600); ctx.stroke(); });
-      [200, 400].forEach(y => { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(960, y); ctx.stroke(); });
-      ctx.setLineDash([]);
-      [320, 640].forEach(x => [200, 400].forEach(y => circle(ctx, x, y, 8, 'rgba(228,234,173,.35)', '#eff2c9', 2)));
+      q('#lab-value-kelvin').textContent = `${state.kelvin} K`;
+      q('#lab-wb-tint').style.background = delta<0?`rgba(42,105,225,${Math.min(.32,-delta/10000)})`:`rgba(249,153,43,${Math.min(.32,delta/14000)})`;
+      q('#lab-image-label').textContent = delta===0?'原片参照 · 未标定光源':'冷暖教学处理 · 非真实 K 值标定';
+      q('#lab-view-footer').innerHTML = `<span><small>示意设置</small>${state.kelvin} K</span><span><small>相对原片</small>${delta===0?'不做处理':delta<0?'偏冷':'偏暖'}</span>`;
+      q('#lab-feedback').textContent = delta===0?'当前没有叠加冷暖处理，显示原片。这不代表原图的光源或相机设置恰好是 5500 K。':delta<0?'同一场景中，降低相机白平衡 K 值通常会使照片更冷。观察天空、亮部和绿色区域的变化。':'同一场景中，提高相机白平衡 K 值通常会使照片更暖。它与“光源色温升高偏蓝”是不同的观察方向。';
+      host.querySelectorAll('[data-kelvin]').forEach(b=>b.setAttribute('aria-pressed',Number(b.dataset.kelvin)===state.kelvin));
     }
   }
-
-  function tick(time) {
-    if (!host || !host.isConnected) return;
-    const delta = lastTime ? Math.min(time - lastTime, 100) : 0;
-    lastTime = time;
-    if (state.tab === 'exposure' && !state.paused) { elapsed += delta; draw(); }
-    frame = requestAnimationFrame(tick);
-  }
-
   root.PhotoLabs = { mount, destroy };
 })(typeof window === 'undefined' ? globalThis : window);
-

@@ -12,7 +12,7 @@
   const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
   function freshState() {
-    return { version: 1, completed: [], tasks: {}, reviews: {}, quiz: {} };
+    return { version: 2, completed: [], tasks: {}, reviews: {}, quiz: {}, diagnostics: {} };
   }
 
   function timestamp(value, name) {
@@ -57,10 +57,18 @@
 
   // Intervals are elapsed 24-hour days, rather than midnight/calendar boundaries.
   // A good answer advances one stage; again resets it, hard retains it.
-  function scheduleReview(previous, rating, now = Date.now()) {
+  function scheduleReview(previous, rating, now = Date.now(), options = {}) {
     timestamp(now, '当前时间');
     if (!['again', 'hard', 'good'].includes(rating)) throw new TypeError('未知的复习评分');
+    object(options, '复习选项');
+    if (Object.keys(options).some(key => key !== 'practiceOnly') ||
+        (Object.hasOwn(options, 'practiceOnly') && typeof options.practiceOnly !== 'boolean')) {
+      throw new TypeError('复习选项无效');
+    }
     const old = previous == null ? { step: 0 } : reviewRecord(previous);
+    // An early, optional drill is not another spaced retrieval session.
+    // Keep its existing appointment and stage, regardless of the self-rating.
+    if (options.practiceOnly && previous != null && old.due > now) return { ...old };
     let step = old.step;
     let delay;
     if (rating === 'again') {
@@ -101,8 +109,11 @@
 
   // Strict whitelist-based import: this never merges untrusted objects into state.
   function validateState(input, lessonIds, taskIds, cardIds) {
-    fields(input, ['version', 'completed', 'tasks', 'reviews', 'quiz'], '学习备份');
-    if (input.version !== 1) throw new TypeError('暂不支持这个备份版本');
+    object(input, '学习备份');
+    if (![1, 2].includes(input.version)) throw new TypeError('暂不支持这个备份版本');
+    const expectedFields = ['version', 'completed', 'tasks', 'reviews', 'quiz'];
+    if (input.version === 2) expectedFields.push('diagnostics');
+    fields(input, expectedFields, '学习备份');
     const lessons = ids(lessonIds, '课程');
     const tasks = ids(taskIds, '任务');
     const cards = ids(cardIds, '记忆卡');
@@ -130,6 +141,18 @@
     for (const id of knownMap(input.quiz, lessons, '测验记录')) {
       if (typeof input.quiz[id] !== 'boolean') throw new TypeError('测验结果必须是布尔值');
       result.quiz[id] = input.quiz[id];
+    }
+    // v1 records retain all prior learning data and start with no visual results.
+    if (input.version === 2) {
+      object(input.diagnostics, '看图训练记录');
+      const keys = Object.keys(input.diagnostics);
+      if (keys.length > 100 || keys.some(id => !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(id))) {
+        throw new TypeError('看图训练标识无效');
+      }
+      for (const id of keys) {
+        if (typeof input.diagnostics[id] !== 'boolean') throw new TypeError('看图训练结果必须是布尔值');
+        result.diagnostics[id] = input.diagnostics[id];
+      }
     }
     return result;
   }
