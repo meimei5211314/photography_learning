@@ -14,6 +14,26 @@
 
 镜头以全画幅常用 24–105mm 范围与 f/4 为易迁移的练习起点，按手中镜头可用光圈调整；这些是练习条件，不是器材购买清单。照片为观察参考，不宣称它们由 R6 三代或案例参数拍摄。学习记录不会上传。
 
+## 在线学习与自动发布
+
+访问 **[光影手记在线版](https://meimei5211314.github.io/photography_learning/)**。相机指南、摄影案例与互动实验直接在浏览器运行。
+
+每次推送到 `main`（包括合并分支）后，[GitHub Actions](https://github.com/meimei5211314/photography_learning/actions/workflows/pages.yml) 自动执行测试、打包和 Pages 发布；测试失败不会覆盖当前网站。也可在该工作流页面点击 **Run workflow** 手动重发。仓库 **Settings → Pages → Source** 使用 **GitHub Actions**。
+
+日常更新：
+
+```powershell
+git add <本次修改的文件>
+git commit -m "更新教程内容"
+git push origin main
+```
+
+本地提交需要 `push` 后才会触发发布。发布完成前会继续显示上一版；完成后刷新网页。可通过站点 [version.json](https://meimei5211314.github.io/photography_learning/version.json) 的 `commit` 核对线上源码版本。发布失败时在 Actions 查看失败步骤，修复后推送或重跑。
+
+在线加载需要网络，完整下载版仍可离线使用。在线地址与本地文件/本地服务器的学习记录不互通：先在原页面“数据备份”导出 JSON，再在在线版导入。记录只保存在当前浏览器，不会上传到 GitHub；正常发布不会主动清空同一地址的记录。请定期导出备份。
+
+部署需求与方案见 `docs/14-pages-deployment-plan.md`。产物仅含页面、样式、脚本、图片、署名及版本信息，不含开发服务器、测试、截图和个人备份。
+
 ## 本地打开
 
 双击 `index.html` 可用普通浏览器打开，使用时保留完整项目文件夹。也可启动本地 HTTP 服务：
@@ -66,6 +86,8 @@ labs.js / labs.css          真实案例对比与相机实验室
 visual-practice.js / .css   看图与情境判断训练
 learning.js                 状态迁移、复习排期和导入校验
 server.cjs                  零依赖本地静态服务器
+scripts/build-pages.cjs     Pages 公开文件打包脚本
+.github/workflows/pages.yml 自动测试与发布工作流
 tests/                      内容、排期、媒体和关键计算检查
 docs/                       需求、方案、资料、素材许可、验证记录
 AGENTS.md                   后续协作规则
@@ -83,9 +105,10 @@ node --check visual-practice.js
 node --check advanced-data.js
 node --check guides.js
 node --check editing-lab.js
+node scripts/build-pages.cjs
 ```
 
-采用 Node.js 24 验证。个人 JSON 备份建议保存到 Git 忽略的 `backups/` 目录。项目源码推送到 GitHub 不等于网站已部署；本版没有配置云服务或自动公开学习数据。
+采用 Node.js 24 验证。个人 JSON 备份建议保存到 Git 忽略的 `backups/` 目录。main 分支源码通过 GitHub Actions 自动发布到 GitHub Pages，学习数据仍只保存在浏览器。
 
 ## 机型与软件资料
 
