@@ -7,6 +7,7 @@ const vm = require('node:vm');
 
 const context = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../data.js'), 'utf8'), context, { timeout: 1000 });
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../advanced-data.js'), 'utf8'), context, { timeout: 1000 });
 const data = context.window.PHOTO_DATA;
 
 function text(value, label) {
@@ -24,11 +25,11 @@ function uniqueIds(values, label) {
   ids.forEach(id => assert.match(id, /^[a-z][a-z0-9-]*$/, label + ' id must be safe for routes'));
 }
 
-test('complete curriculum contains 12 lessons, 8 practical tasks and 24 memory cards', () => {
+test('complete curriculum contains 18 lessons, 14 practical tasks and 36 memory cards', () => {
   assert.ok(data && typeof data === 'object');
-  assert.equal(data.lessons.length, 12);
-  assert.equal(data.tasks.length, 8);
-  assert.equal(data.cards.length, 24);
+  assert.equal(data.lessons.length, 18);
+  assert.equal(data.tasks.length, 14);
+  assert.equal(data.cards.length, 36);
   uniqueIds(data.lessons, 'lesson');
   uniqueIds(data.tasks, 'task');
   uniqueIds(data.cards, 'card');
@@ -38,7 +39,7 @@ test('every lesson includes explanation, practice, misconceptions and an answera
   const labs = new Set(['', 'exposure', 'composition', 'focal', 'whitebalance']);
   for (const lesson of data.lessons) {
     for (const field of ['title', 'subtitle', 'tag', 'art', 'intro', 'mnemonic']) text(lesson[field], lesson.id + '.' + field);
-    assert.ok([1, 2, 3].includes(lesson.stage), lesson.id + ' stage');
+    assert.ok([1, 2, 3, 4].includes(lesson.stage), lesson.id + ' stage');
     assert.ok(Number.isFinite(lesson.minutes) && lesson.minutes > 0, lesson.id + ' duration');
     assert.ok(labs.has(lesson.lab), lesson.id + ' lab route');
     assert.ok(Array.isArray(lesson.sections) && lesson.sections.length >= 3, lesson.id + ' explanations');
@@ -53,7 +54,7 @@ test('every lesson includes explanation, practice, misconceptions and an answera
     texts(lesson.quiz.options, 2, lesson.id + '.quiz.options');
     assert.ok(Number.isInteger(lesson.quiz.answer) && lesson.quiz.answer >= 0 && lesson.quiz.answer < lesson.quiz.options.length, lesson.id + ' correct answer index');
   }
-  for (const stage of [1, 2, 3]) assert.ok(data.lessons.some(lesson => lesson.stage === stage), 'stage ' + stage + ' must have lessons');
+  for (const stage of [1, 2, 3, 4]) assert.ok(data.lessons.some(lesson => lesson.stage === stage), 'stage ' + stage + ' must have lessons');
 });
 
 test('practical tasks contain instructions, starting settings, observable criteria and reflection', () => {

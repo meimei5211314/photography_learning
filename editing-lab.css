@@ -1,0 +1,120 @@
+/* Photography editing practice: scoped styles and no continuously running animation. */
+.edit-root { --edit-ink:#244537; --edit-muted:#60725a; --edit-line:#dce4d4; --edit-paper:#fffef9; color:var(--edit-ink); }
+.edit-root [hidden] { display:none!important; }
+.edit-root button:focus-visible,.edit-root input:focus-visible,.edit-root select:focus-visible,.edit-root a:focus-visible,.edit-root summary:focus-visible { outline:3px solid #91aa50; outline-offset:4px; }
+.edit-intro { display:flex; justify-content:space-between; gap:25px; align-items:flex-start; margin-bottom:23px; }
+.edit-eyebrow { display:block; font-size:12px; letter-spacing:.8px; font-weight:650; color:#728759; margin-bottom:12px; }
+.edit-intro h2 { font-size:clamp(25px,2.7vw,34px); margin:0 0 12px; line-height:1.5; letter-spacing:-.6px; }
+.edit-intro p { max-width:740px; font-size:16px; line-height:1.9; color:var(--edit-muted); margin:0; }
+.edit-mode-label { display:inline-flex; flex-shrink:0; border:1px solid #d0dbbb; border-radius:30px; padding:8px 13px; font-size:12px; color:#678046; background:#eff4e2; margin-top:4px; }
+.edit-boundary { border-left:3px solid #9db269; background:#eef3e4; padding:19px 23px; margin-bottom:24px; border-radius:0 10px 10px 0; }
+.edit-boundary strong { font-size:15px; font-weight:650; }
+.edit-boundary p { font-size:14px; color:#5f7352; margin:8px 0 0; line-height:1.9; }
+.edit-source-row { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:20px; }
+.edit-scene-buttons { display:flex; flex-wrap:wrap; gap:8px; }
+.edit-button { min-height:44px; padding:11px 15px; border:1px solid #cbd8be; border-radius:8px; background:#fffef9; color:#355b41; font:inherit; font-size:14px; line-height:1.6; cursor:pointer; }
+.edit-button:hover { background:#edf3e1; }
+.edit-button[aria-pressed=true] { background:#2d533f; border-color:#2d533f; color:#fff; }
+.edit-button:disabled { background:#eef3e5; color:#6b8256; opacity:1; cursor:default; border-color:#e1e8d6; }
+.edit-source-row>.edit-button { flex-shrink:0; }
+.edit-workspace { display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:23px; align-items:start; }
+.edit-visual { min-width:0; }
+.edit-photo-stage { width:100%; aspect-ratio:var(--edit-ratio,1.5); max-height:620px; position:relative; overflow:hidden; isolation:isolate; background:#1e2d26; border-radius:14px; touch-action:pan-y; cursor:ew-resize; user-select:none; }
+.edit-photo-layer { position:absolute; inset:0; background:#1e2d26; }
+.edit-photo-layer img { display:block; position:absolute; inset:0; width:100%; height:100%; object-fit:contain; max-width:none; }
+.edit-after { z-index:1; isolation:isolate; }
+.edit-before { z-index:2; }
+.edit-warmth { position:absolute; inset:0; z-index:2; mix-blend-mode:color; pointer-events:none; }
+.edit-picture-label { position:absolute; top:16px; z-index:5; border-radius:5px; background:#173b2fe8; color:#fff; padding:8px 12px; font-size:12px; line-height:1.4; backdrop-filter:blur(6px); }
+.edit-original-label { left:16px; }
+.edit-adjusted-label { right:16px; }
+.edit-divider { position:absolute; top:0; bottom:0; width:2px; z-index:4; background:white; left:50%; box-shadow:0 0 5px #0005; pointer-events:none; }
+.edit-divider>span { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); height:42px; width:42px; background:#fffef9; color:#2d503c; border-radius:50%; display:grid; place-items:center; box-shadow:0 2px 12px #0003; font-size:22px; }
+.edit-image-status { position:absolute; inset:0; display:grid; place-items:center; padding:25px; background:#e8eddf; color:#5c7053; font-size:16px; line-height:1.9; text-align:center; z-index:8; }
+.edit-loaded>.edit-image-status { display:none; }
+.edit-compare-controls { padding:18px 22px; background:var(--edit-paper); border:1px solid var(--edit-line); border-radius:11px; margin-top:12px; }
+.edit-compare-controls>label { display:flex; justify-content:space-between; gap:12px; align-items:center; font-size:14px; font-weight:600; margin-bottom:12px; }
+.edit-compare-controls output { color:#738657; font-size:12px; font-weight:400; }
+.edit-root input[type=range] { width:100%; margin:0; height:28px; accent-color:#355d43; cursor:pointer; }
+.edit-compare-buttons { display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
+.edit-compare-buttons .edit-button { flex:1; font-size:13px; }
+.edit-credit { margin:14px 0 0; font-size:12px; line-height:1.85; color:#68795e; overflow-wrap:anywhere; }
+.edit-credit a { color:#42643d; text-decoration:underline; text-underline-offset:3px; }
+.edit-credit-note { font-size:12px; line-height:1.9; color:#748368; margin:7px 0 0; }
+.edit-controls { background:var(--edit-paper); border:1px solid var(--edit-line); border-radius:13px; padding:23px; }
+.edit-controls>h3 { font-size:16px; margin:0 0 10px; }
+.edit-control { padding:21px 0; border-bottom:1px solid #e3e9da; }
+.edit-control label { display:flex; justify-content:space-between; align-items:center; gap:9px; font-size:14px; font-weight:600; margin-bottom:12px; }
+.edit-control output { font-size:17px; font-family:Consolas,monospace; white-space:nowrap; color:#355e40; }
+.edit-range-labels { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:#738365; line-height:1.5; margin-top:4px; }
+.edit-control p { margin:10px 0 0; font-size:13px; line-height:1.8; color:#6c7d60; }
+.edit-preset-row { display:flex; flex-wrap:wrap; gap:8px; padding-top:21px; }
+.edit-preset-row>span { display:block; width:100%; font-size:12px; color:#758967; margin-bottom:3px; }
+.edit-preset-row .edit-button { font-size:12px; flex:1; padding:10px; }
+.edit-feedback { padding:21px 23px; margin-top:24px; border:1px solid #d8e2c9; border-radius:12px; background:#edf3e1; }
+.edit-feedback>span { display:block; font-size:13px; color:#5b7844; font-weight:650; margin-bottom:8px; }
+.edit-feedback p { font-size:16px; line-height:1.9; color:#536d48; margin:0; }
+.edit-goal { margin-top:30px; display:grid; grid-template-columns:1fr 1.1fr; gap:35px; background:var(--edit-paper); border:1px solid var(--edit-line); border-radius:13px; padding:28px; }
+.edit-goal h3 { font-size:21px; line-height:1.6; margin:0 0 18px; }
+.edit-goal label { display:block; font-size:13px; color:#6d805d; margin-bottom:9px; }
+.edit-goal select { width:100%; max-width:320px; min-height:44px; padding:10px 12px; border:1px solid #ced9c3; background:#f6f9ef; color:#355b3f; border-radius:7px; font:inherit; font-size:15px; }
+.edit-goal p { font-size:16px; color:#637556; line-height:1.9; margin:15px 0 0; }
+.edit-goal h4 { font-size:16px; margin:3px 0 15px; }
+.edit-goal ol { font-size:16px; line-height:1.9; color:#65785a; padding-left:23px; margin:0 0 19px; }
+.edit-goal .edit-button { background:#2d533f; color:white; border-color:#2d533f; }
+.edit-goal .edit-goal-feedback { font-size:14px; line-height:1.9; background:#f1f5e8; padding:16px; border-radius:8px; }
+.edit-goal-feedback:empty { display:none; }
+.edit-workflow { margin-top:39px; }
+.edit-section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:22px; margin-bottom:23px; }
+.edit-section-head h3 { font-size:25px; margin:0 0 10px; }
+.edit-section-head p { font-size:16px; line-height:1.9; color:#65795a; max-width:760px; margin:0; }
+.edit-section-head>.edit-button { flex-shrink:0; margin-top:12px; }
+.edit-workflow-progress { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:7px; }
+.edit-order-slot { min-width:0; min-height:100px; padding:15px 10px; border:1px dashed #cbd6be; border-radius:9px; color:#829174; font-size:12px; line-height:1.8; background:#f4f7ed; }
+.edit-order-slot b { display:block; font-family:Consolas,monospace; font-size:21px; color:#a0b18a; font-weight:400; margin-bottom:8px; }
+.edit-order-slot.is-filled { color:#3e643c; background:#e9f0dc; border-style:solid; border-color:#c6d6af; }
+.edit-order-slot.is-filled b { color:#6c8b4c; }
+.edit-workflow-options { display:flex; flex-wrap:wrap; gap:9px; margin-top:21px; }
+.edit-workflow-options .edit-button { flex:1 1 170px; font-size:14px; text-align:left; }
+.edit-order-feedback { font-size:16px; line-height:1.9; padding:20px 22px; margin:20px 0; background:#eef3e3; border-radius:10px; color:#526d41; min-height:70px; }
+.edit-order-feedback.is-wrong { background:#fbf2e4; color:#8b643b; }
+.edit-workflow-answer { border:1px solid var(--edit-line); border-radius:10px; padding:19px 23px; background:var(--edit-paper); }
+.edit-workflow-answer summary { cursor:pointer; font-size:15px; font-weight:600; line-height:1.7; }
+.edit-workflow-answer ol { padding-left:24px; font-size:16px; line-height:1.9; color:#5f7553; margin-bottom:0; }
+.edit-workflow-answer li { margin-top:16px; padding-left:6px; }
+.edit-workflow-answer strong { color:#3e603c; font-weight:600; }
+.edit-workflow-answer p { margin:5px 0 0; font-size:15px; line-height:1.9; }
+.edit-takeaway { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-top:30px; padding-top:29px; border-top:1px solid var(--edit-line); }
+.edit-takeaway h3 { font-size:19px; line-height:1.7; margin:0 0 12px; }
+.edit-takeaway p { font-size:16px; line-height:1.95; color:#65795a; margin:0 0 14px; }
+.edit-takeaway a { color:#40633d; text-decoration:underline; text-underline-offset:4px; font-size:14px; line-height:1.8; }
+.edit-missing { padding:30px; min-height:280px; background:#eef3e4; border:1px solid var(--edit-line); border-radius:12px; }
+.edit-missing h3 { font-size:22px; }
+.edit-missing p { font-size:16px; line-height:1.9; color:#687c5d; }
+@media(max-width:1150px) { .edit-workspace { grid-template-columns:minmax(0,1fr) 260px; gap:18px; } .edit-controls { padding:20px; } .edit-goal { gap:25px; padding:24px; } .edit-workflow-progress { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@media(max-width:900px) { .edit-workspace { grid-template-columns:1fr; } .edit-controls { display:grid; grid-template-columns:1fr 1fr; gap:0 25px; padding:23px; } .edit-controls>h3,.edit-preset-row { grid-column:1/-1; } .edit-preset-row .edit-button { flex:initial; padding:10px 16px; } .edit-goal { grid-template-columns:1fr; gap:20px; } .edit-source-row { flex-direction:column; } .edit-source-row>.edit-button { align-self:flex-end; } .edit-mode-label { font-size:11px; } }
+@media(max-width:600px) {
+ .edit-intro { flex-direction:column; gap:12px; } .edit-intro h2 { font-size:26px; } .edit-mode-label { margin:0; }
+ .edit-eyebrow { font-size:11px; line-height:1.8; }
+ .edit-boundary { padding:18px; } .edit-boundary p { font-size:14px; }
+ .edit-scene-buttons { width:100%; } .edit-scene-buttons .edit-button { flex:1 1 130px; font-size:13px; }
+ .edit-source-row { gap:12px; }
+ .edit-photo-stage { border-radius:10px; max-height:540px; }
+ .edit-picture-label { top:11px; font-size:11px; padding:6px 10px; } .edit-original-label { left:11px; } .edit-adjusted-label { right:11px; }
+ .edit-divider>span { width:34px; height:34px; font-size:19px; }
+ .edit-compare-controls { padding:17px 16px; } .edit-compare-controls>label { flex-direction:column; align-items:flex-start; gap:6px; }
+ .edit-compare-buttons { gap:6px; } .edit-compare-buttons .edit-button { font-size:12px; padding:10px 8px; }
+ .edit-credit,.edit-credit-note { font-size:11px; }
+ .edit-controls { display:block; padding:23px; } .edit-control label { font-size:15px; } .edit-control p { font-size:14px; }
+ .edit-preset-row .edit-button { flex:1; }
+ .edit-feedback { padding:20px; } .edit-goal { padding:22px; } .edit-goal h3 { font-size:21px; }
+ .edit-section-head { flex-direction:column; gap:13px; } .edit-section-head>.edit-button { align-self:flex-end; margin:0; }
+ .edit-section-head h3 { font-size:23px; }
+ .edit-workflow-progress { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+ .edit-order-slot { min-height:85px; padding:12px 13px; font-size:13px; } .edit-order-slot b { font-size:19px; margin-bottom:5px; }
+ .edit-workflow-options { display:grid; grid-template-columns:1fr; } .edit-workflow-options .edit-button { font-size:15px; }
+ .edit-order-feedback { padding:18px; }
+ .edit-workflow-answer { padding:19px; }
+ .edit-takeaway { grid-template-columns:1fr; gap:25px; }
+}
+@media(prefers-reduced-motion:reduce) { .edit-root * { transition:none!important; animation:none!important; scroll-behavior:auto!important; } }

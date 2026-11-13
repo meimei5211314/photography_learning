@@ -1,0 +1,108 @@
+{
+  "lessons": [
+    "camera",
+    "exposure",
+    "aperture",
+    "shutter",
+    "iso",
+    "focus",
+    "lens",
+    "composition",
+    "light",
+    "whitebalance",
+    "modes",
+    "workflow"
+  ],
+  "cards": [
+    "camera-path",
+    "camera-check",
+    "exposure-stop",
+    "exposure-trade",
+    "aperture-number",
+    "aperture-background",
+    "shutter-motion",
+    "shutter-tripod",
+    "iso-photons",
+    "iso-choice",
+    "focus-mode",
+    "focus-diagnose",
+    "lens-view",
+    "lens-crop",
+    "composition-order",
+    "composition-rule",
+    "light-soft",
+    "light-side",
+    "wb-direction",
+    "wb-mixed",
+    "modes-decision",
+    "modes-manual",
+    "workflow-raw",
+    "workflow-reflect"
+  ],
+  "tasks": [
+    {
+      "id": "three-apertures",
+      "criteria": [
+        "杯子上的同一处细节在三张里都清楚。",
+        "能指出背景清晰范围的变化，而不只评价哪张好看。",
+        "写明机位、主体距离与背景距离是否保持一致。"
+      ]
+    },
+    {
+      "id": "stop-time",
+      "criteria": [
+        "至少一张表现拖影，一张明显减少拖影。",
+        "背景足够稳定，便于判断主体运动。",
+        "记录快门与实际效果，不把建议数值当作保证。"
+      ]
+    },
+    {
+      "id": "window-portrait",
+      "criteria": [
+        "关键眼睛清楚；若人物在动，快门足够短。",
+        "能说明白纸板对阴影的影响。",
+        "背景没有从头顶穿出的杂物或抢眼亮斑。"
+      ]
+    },
+    {
+      "id": "composition-walk",
+      "criteria": [
+        "保留至少一组有意改进的前后对照。",
+        "能说明引导线指向哪里。",
+        "主题不依赖长段解释也能看懂。"
+      ]
+    },
+    {
+      "id": "focal-distance",
+      "criteria": [
+        "第一组机位不变，第二组主体画面大小近似。",
+        "能区分取景范围变化与透视变化。",
+        "记录焦距是实际值还是等效值。"
+      ]
+    },
+    {
+      "id": "night-city",
+      "criteria": [
+        "建筑边缘清楚，能看出相机保持稳定。",
+        "保留两张不同时间表现的照片。",
+        "能指出哪些高光重要，哪些小光点允许变成纯亮。"
+      ]
+    },
+    {
+      "id": "color-story",
+      "criteria": [
+        "能正确说明相机 K 值升高时画面通常变暖。",
+        "三张主体亮度近似，避免把明暗误认为颜色差异。",
+        "能说明哪个版本追求还原，哪个版本追求表达。"
+      ]
+    },
+    {
+      "id": "mini-story",
+      "criteria": [
+        "三张各有职责，不是同一角度的三张近似照。",
+        "每张都能说出一个明确的技术取舍。",
+        "完成一份包含“下次只改什么”的复盘。"
+      ]
+    }
+  ]
+}
