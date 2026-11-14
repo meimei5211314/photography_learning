@@ -151,7 +151,7 @@
   data.lessons.push(...lessons);
   data.tasks.push(...tasks);
   data.cards.push(...cards);
-  data.sources.push(...sources);
+  data.sources.push(...sources.filter(source => !data.sources.some(existing => existing.url === source.url)));
   const field = { lessons, tasks, cards, sources, lessonIds: lessons.map(item => item.id), taskIds: tasks.map(item => item.id), cardIds: cards.map(item => item.id) };
   root.PHOTO_FIELD = field;
   if (typeof module === 'object' && module.exports) module.exports = field;

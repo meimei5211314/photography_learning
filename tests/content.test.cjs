@@ -77,6 +77,7 @@ test('all cards link to existing lessons, every lesson is covered, and sources u
   }
   assert.equal(covered.size, lessonIds.size, 'all lessons need memory cards');
   assert.ok(Array.isArray(data.sources) && data.sources.length >= 2, 'sources must be provided');
+  assert.equal(new Set(data.sources.map(source => source.url)).size, data.sources.length, 'source URLs should not repeat');
   for (const source of data.sources) {
     text(source.title, 'source.title');
     text(source.note, 'source.note');

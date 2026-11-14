@@ -8,5 +8,17 @@
 @media(max-width:1150px){.camera-guide-intro{gap:23px;padding:25px}.camera-guide-intro h1{font-size:28px}.camera-diagram{padding:17px}.camera-step-tabs{grid-template-columns:repeat(4,1fr)}.case-body{grid-template-columns:minmax(0,1fr) 210px;gap:25px}.case-card-photo{height:210px}.specialty-paths strong{font-size:16px}}
 @media(max-width:900px){.camera-guide-intro{grid-template-columns:1fr}.camera-guide-intro .camera-diagram{max-width:540px;width:100%;justify-self:center}.camera-guide-intro h1 br{display:none}.case-body{grid-template-columns:1fr}.case-aside{display:grid;grid-template-columns:1fr 1fr;gap:15px}.case-detail h1{font-size:30px}.specialty-paths{grid-template-columns:1fr}.specialty-paths a{padding:17px 21px}.specialty-paths strong{display:inline-block;margin:0 15px}.specialty-paths p{margin-top:7px}}
 @media(max-width:650px){#navigation{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.nav-link{flex-direction:column;padding:8px 3px;gap:4px;font-size:11px;min-height:56px}.camera-guide-intro{padding:22px 18px}.camera-guide-intro h1{font-size:27px}.camera-step-tabs{gap:5px}.camera-step-tabs button{font-size:13px;min-height:61px}.camera-step-detail{padding:22px 18px}.camera-step-detail h3{font-size:23px}.camera-step-actions{grid-template-columns:1fr;gap:12px}.camera-recipe{grid-template-columns:1fr;padding:20px}.camera-mode-badge{display:flex;align-items:center;justify-content:center;gap:20px;font-size:30px;padding:12px}.camera-mode-badge small{margin:0}.recipe-settings{gap:8px}.recipe-settings span{font-size:13px}.guide-memory{padding:22px 18px}.guide-memory h3{font-size:21px}.case-grid{grid-template-columns:1fr}.case-intro h1{font-size:25px}.case-detail h1{font-size:28px}.case-card-photo{height:240px}.case-settings>div{grid-template-columns:70px minmax(0,1fr)}.case-settings dt{padding:14px 9px}.case-settings dd{padding:14px}.case-aside{grid-template-columns:1fr}.case-body h3{font-size:23px}.case-body p{font-size:16px}.case-feature-photo img{max-height:420px}.guide-links .primary,.guide-links .secondary{width:100%;justify-content:center;text-align:center}.lab-edit-entry{align-items:flex-start;flex-direction:column}.lesson-camera-visual .camera-diagram{padding:22px}.guide-source-note{overflow-wrap:anywhere}}
+
+/* The expanded learning path keeps four equal entry points and nine mobile links. */
+.sidebar{overflow-y:auto}
+.specialty-paths{grid-template-columns:repeat(2,minmax(0,1fr))}
+.search-result-type{display:inline-block;font-size:11px;color:var(--green);background:var(--pale);padding:3px 7px;border-radius:4px;margin-right:8px}
+.search-count{font-size:12px;color:#687568;padding:8px 4px}
+.reflection-help{font-size:13px;color:#667364;margin:12px 0}
+.reflection-help summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.reflection-help p{margin:10px 0;font-size:13px}
+.task-template-button{margin:0 0 12px;max-width:100%;white-space:normal}
+@media(max-width:900px){.specialty-paths{grid-template-columns:1fr}}
+@media(max-width:650px){#navigation{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.case-card{transition:none}.case-card:hover{transform:none}}
 .case-card-photo img[src$="portrait-window.jpg"],.course-picture img[src$="portrait-window.jpg"]{object-position:50% 8%}

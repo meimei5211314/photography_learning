@@ -6,7 +6,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 const root=path.resolve(__dirname,'..');
 const context={window:{}};
-for(const file of ['data.js','advanced-data.js','media.js','media-v3.js']) vm.runInNewContext(fs.readFileSync(path.join(root,file),'utf8'),context);
+for(const file of ['data.js','advanced-data.js','field-data.js','media.js','media-v3.js']) vm.runInNewContext(fs.readFileSync(path.join(root,file),'utf8'),context);
 const M=context.window.PHOTO_MEDIA;
 const D=context.window.PHOTO_DATA;
 
@@ -34,7 +34,7 @@ test('hero and every lesson resolve to available photography assets',()=>{
 test('page loads media and practice modules before the application and all script files exist',()=>{
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
   const scripts=[...html.matchAll(/<script src="([^"]+)"/g)].map(m=>m[1]);
-  for(const name of ['data.js','advanced-data.js','media.js','media-v3.js','learning.js','labs.js','visual-practice.js','guides.js','editing-lab.js']){
+  for(const name of ['data.js','advanced-data.js','field-data.js','media.js','media-v3.js','learning.js','progress-store.js','labs.js','visual-practice.js','guides.js','editing-lab.js','field-guide.js','search.js']){
     assert.ok(scripts.indexOf(name)>=0&&scripts.indexOf(name)<scripts.indexOf('app.js'),name);
   }
   for(const file of scripts)assert.ok(fs.existsSync(path.join(root,file)),file);

@@ -2,9 +2,23 @@
 
 中文交互摄影教程。从真实照片开始，通过对照、参数实验、看图判断、实拍任务与主动回忆掌握摄影。
 
-## 第三版：R6 三代与完整拍摄案例
+## 内容增强：从现场判断到作品交付
 
-以佳能 **EOS R6 Mark III（R6 三代）** 为操作实例，结合真实摄影素材、互动实验与主动回忆。现有 **18 节课程、14 个实战任务、36 张记忆卡、6 个场景案例**。
+现有 **22 节课程、18 个实战任务、44 张记忆卡、6 个场景案例**。新增第 5 阶段“诊断与交付”：
+
+- **测光与直方图**：分清亮度分布、重要高光、曝光补偿和场景反差，用实拍对照验证。
+- **清晰度排障**：区分失焦、景深不足、主体拖影与相机抖动，每次只改变一个主要变量。
+- **风光与长曝光**：检查近景/远景、稳定支撑、流水/枝叶运动和亮暗取舍。
+- **导出与备份**：从使用目的选择像素尺寸和色彩空间，检查导出副本，实际验证独立备份能否恢复。
+- **现场排障**：从自己观察到的症状进入检查步骤，再回到相应课程和实拍任务；它不自动分析上传照片。
+- **看图训练与复盘**：新增人像、逆光、合影、街头与后期判断；任务可追加复盘模板，保留原有笔记。
+- **全站搜索**：课程、实拍任务、场景案例与排障统一检索。
+
+学习进度继续使用原有备份格式。保存失败会持续提示；检测到其他标签页修改时暂停覆盖，允许先导出本页记录，再载入最新记录。建议同一时间在一个标签页记录学习；浏览器存储不提供数据库级的跨页事务。
+
+## R6 三代与完整拍摄案例
+
+以佳能 **EOS R6 Mark III（R6 三代）** 为操作实例，结合真实摄影素材、互动实验与主动回忆。
 
 - **R6 三代指南**：8 步上手，理解 Av / Tv / M＋自动 ISO、人物眼睛检测与 Servo、快门类型、RAW＋JPEG、回放与 C1–C3。配方说明选择理由和调整条件。
 - **6 个完整案例**：窗边人像、户外逆光、多人合影、白天街头、夜街人物、三张叙事。每例连接拍摄意图、起点、现场执行、构图、故障诊断、后期与任务记录。
@@ -39,7 +53,7 @@ git push origin main
 双击 `index.html` 可用普通浏览器打开，使用时保留完整项目文件夹。也可启动本地 HTTP 服务：
 
 ```powershell
-Set-Location 'E:\opencode_workspace\photography_learning'
+Set-Location 'D:\Workspace\11_Learning\photography_learning'
 node server.cjs
 ```
 
@@ -55,6 +69,10 @@ node server.cjs
 - `http://127.0.0.1:4173/#cases`：人像、街拍与叙事案例
 - `http://127.0.0.1:4173/#edit`：后期练习工作台
 - `http://127.0.0.1:4173/#lesson/composition-story`：构图进阶课程
+- `http://127.0.0.1:4173/#diagnose`：现场排障
+- `http://127.0.0.1:4173/#lesson/metering-histogram`：测光与直方图
+- `http://127.0.0.1:4173/#lesson/landscape-long-exposure`：风光与长曝光
+- `http://127.0.0.1:4173/#lesson/export-backup`：导出与备份
 
 ## 推荐学习方式
 
@@ -78,6 +96,10 @@ node server.cjs
 index.html / styles.css     主界面、排版和响应式布局
 app.js                      路由、课程、自测、任务、进度和备份
 data.js / advanced-data.js  基础/专题课程、任务、记忆卡与案例
+field-data.js                诊断与交付课程、任务和回忆卡
+field-guide.js / .css        现场症状排查与练习入口
+search.js                    全站内容索引与搜索
+progress-store.js            保存结果与跨标签页变更检测
 media.js / media-v3.js      摄影素材映射与可检查的署名元数据
 assets/                    本地真实摄影素材
 guides.js / guides.css     R6 三代操作与场景案例
@@ -88,6 +110,7 @@ learning.js                 状态迁移、复习排期和导入校验
 server.cjs                  零依赖本地静态服务器
 scripts/build-pages.cjs     Pages 公开文件打包脚本
 .github/workflows/pages.yml 自动测试与发布工作流
+.github/workflows/validate.yml PR 验证与打包（不发布）
 tests/                      内容、排期、媒体和关键计算检查
 docs/                       需求、方案、资料、素材许可、验证记录
 AGENTS.md                   后续协作规则
@@ -95,7 +118,7 @@ AGENTS.md                   后续协作规则
 
 ## 维护与验证
 
-每次设计前先更新需求，再写方案，然后修改代码、验证、提交 Git。当前需求见 `docs/09-v3-requirements.md`，方案见 `docs/10-v3-plan.md`。不覆盖用户记录；存储格式异常时保留原始内容，允许导出以便恢复。
+每次设计前先更新需求，再写方案，然后修改代码、验证、提交 Git。本轮需求见 `docs/16-completeness-requirements.md`，方案见 `docs/17-completeness-plan.md`，新增事实来源见 `docs/18-completeness-sources.md`，验证结果见 `docs/19-completeness-verification.md`。不覆盖用户记录；存储格式异常时保留原始内容，允许导出以便恢复。
 
 ```powershell
 node --test --test-isolation=none tests/*.test.cjs
@@ -108,7 +131,9 @@ node --check editing-lab.js
 node scripts/build-pages.cjs
 ```
 
-采用 Node.js 24 验证。个人 JSON 备份建议保存到 Git 忽略的 `backups/` 目录。main 分支源码通过 GitHub Actions 自动发布到 GitHub Pages，学习数据仍只保存在浏览器。
+CI 使用 Node.js 24，本轮本地验证使用 Node.js 25.7.0，详见验证记录。个人 JSON 备份建议保存到 Git 忽略的 `backups/` 目录。main 分支源码推送后通过 GitHub Actions 自动发布到 GitHub Pages，学习数据仍只保存在浏览器。
+
+向 main 提交的 PR 会单独运行只读权限的验证与打包，不调用 Pages 部署。开发时可选运行 `node scripts/check-browser.cjs`；该检查需要测试环境提供 Playwright（可通过 `PLAYWRIGHT_MODULE` 指定模块路径、`BROWSER_EXECUTABLE` 指定 Chromium 路径），不增加站点运行依赖。截图输出到 Git 忽略的 `.validation/browser/`。
 
 ## 机型与软件资料
 
