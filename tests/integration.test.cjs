@@ -9,10 +9,11 @@ const original = require('./fixtures/v3-content-contract.json');
 const fieldBaseline = require('./fixtures/field-content-contract.json');
 const curriculumBaseline = require('./fixtures/curriculum-30-contract.json');
 const cameraBaseline = require('./fixtures/curriculum-36-contract.json');
+const kitBaseline = require('./fixtures/curriculum-40-contract.json');
 const learning = require('../learning.js');
 const root = path.resolve(__dirname, '..');
 const context = { window: {} };
-for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
+for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','dual-camera-lessons.js','dual-camera-data.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
   vm.runInNewContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
 }
 const D = context.window.PHOTO_DATA;
@@ -22,8 +23,10 @@ const histograms = context.window.PhotoHistogram.scenarios;
 const paths = context.window.PhotoPaths.items;
 const cameraTopics = context.window.PHOTO_CAMERA_CONFIG.topics;
 const equipment = context.window.PHOTO_EQUIPMENT;
+const dualCamera = context.window.PHOTO_DUAL_CAMERA;
 const plain = value => JSON.parse(JSON.stringify(value));
 const supported = {
+  kit: new Set(['r6-r7']),
   camera: new Set(cameraTopics.map(item=>item.id)),
   paths: new Set(paths.map(item=>item.id)),
   lesson: new Set(D.lessons.map(x => x.id)), practice: new Set(D.tasks.map(x => x.id)),
@@ -59,8 +62,8 @@ test('all 22 previous lessons and 18 task records survive the new curriculum wit
 });
 test('new learning paths and all search results point to supported pages and actual records', () => {
   for (const lesson of D.lessons) for (const related of lesson.related || []) assertLink(related.href);
-  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment);
-  assert.equal(index.length, D.lessons.length + D.tasks.length + cases.length + diagnoses.length + histograms.length + D.glossary.length + paths.length + cameraTopics.length + 1);
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment, dualCamera);
+  assert.equal(index.length, D.lessons.length + D.tasks.length + cases.length + diagnoses.length + histograms.length + D.glossary.length + paths.length + cameraTopics.length + 2);
   for (const item of index) assertLink(item.href);
   for (const keyword of ['直方图', '清晰', '导出', '长曝光', 'RAW', '闪光', '近摄', '夜景', '组照', '滚动快门', '滤镜', '追随', '蒙版', '软打样']) {
     assert.ok(search(index, keyword).length > 0, keyword + ' must be discoverable');
@@ -125,7 +128,7 @@ test('camera detail preserves all 36 lesson identities, quiz meanings and 32 sav
 });
 
 test('all camera configurations link to real lessons and tasks and can be found through setting names', () => {
-  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment);
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment, dualCamera);
   assert.equal(cameraTopics.length,12);
   for (const topic of cameraTopics) {
     assertLink('#camera/'+topic.id);
@@ -144,7 +147,7 @@ test('confirmed kit and four lens courses are discoverable without marking new p
   assert.equal(equipment.lenses.length,2);
   for (const lens of equipment.lenses) assertLink('#lesson/'+lens.lessonId);
   for (const scenario of equipment.scenarios) assertLink('#lesson/'+scenario.lessonId);
-  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment);
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment, dualCamera);
   for (const term of ['小痰盂','18-150','RF50','RF50mmf1.8stm']) {
     assert.ok(search(index, term).some(item=>item.href==='#kit'),term+' kit entry');
   }
@@ -154,4 +157,38 @@ test('confirmed kit and four lens courses are discoverable without marking new p
   const restored = learning.validateState(state,D.lessons.map(x=>x.id),D.tasks.map(x=>x.id),D.cards.map(x=>x.id));
   for (const lesson of D.lessons.filter(item=>item.stage===10)) assert.ok(!restored.completed.includes(lesson.id));
   for (const id of ['prime-distance-focus','zoom-aperture-map','matched-lens-pairs','two-lens-field-story']) assert.equal(restored.tasks[id],undefined);
+});
+
+test('optional R7 expansion preserves the full forty-lesson backup contract', () => {
+  assert.deepEqual(plain(D.lessons.slice(0,40).map(item=>item.id)),kitBaseline.lessons);
+  assert.deepEqual(plain(D.cards.slice(0,80).map(item=>item.id)),kitBaseline.cards);
+  assert.deepEqual(plain(D.tasks.slice(0,36).map(item=>item.id)),kitBaseline.tasks.map(item=>item.id));
+  const before=learning.freshState();
+  before.completed=[...kitBaseline.lessons];
+  for(const id of kitBaseline.lessons){
+    assert.deepEqual(plain(D.lessons.find(item=>item.id===id).quiz),kitBaseline.quiz[id],id);
+    before.quiz[id]=true;
+  }
+  for(const item of kitBaseline.tasks){
+    assert.deepEqual(plain(D.tasks.find(task=>task.id===item.id).criteria),item.criteria,item.id);
+    before.tasks[item.id]={completed:true,checks:item.criteria.map((_,i)=>i),note:'增加可选R7前已有的拍摄记录'};
+  }
+  for(const id of kitBaseline.cards)before.reviews[id]={step:2,due:1794790800000,lastReviewed:1794531600000};
+  const after=learning.validateState(before,D.lessons.map(x=>x.id),D.tasks.map(x=>x.id),D.cards.map(x=>x.id));
+  assert.deepEqual(after,before);
+  for(const lesson of D.lessons.filter(item=>item.stage===11))assert.ok(!after.completed.includes(lesson.id));
+  for(const [,task] of dualCamera.practicePairs)assert.equal(after.tasks[task],undefined);
+});
+
+test('optional dual-camera profile is reachable, searchable and independent of the confirmed kit', () => {
+  assertLink('#kit/r6-r7');
+  assert.match(dualCamera.intro,/如果|假设|若/);
+  for(const [lesson,task] of dualCamera.practicePairs){assertLink('#lesson/'+lesson);assertLink('#practice/'+task);}
+  for(const scene of dualCamera.scenarios)assertLink('#lesson/'+scene.lessonId);
+  const index=buildIndex(D,cases,diagnoses,histograms,paths,cameraTopics,equipment,dualCamera);
+  for(const term of ['R7','双机','R7 RF50','R7 18-150'])assert.ok(search(index,term).some(item=>item.href==='#kit/r6-r7'),term);
+  assert.ok(index.some(item=>item.href==='#kit'&&item.type==='手头器材'));
+  const legacy=buildIndex(D,cases,diagnoses,histograms,paths,cameraTopics,equipment);
+  assert.ok(!legacy.some(item=>item.type==='可选双机'));
+  assert.equal(index.length,legacy.length+1);
 });

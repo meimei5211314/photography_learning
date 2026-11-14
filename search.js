@@ -13,7 +13,7 @@
     if (value && typeof value === 'object') return Object.values(value).map(words).join(' ');
     return '';
   }
-  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = [], cameraTopics = [], equipment = null) {
+  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = [], cameraTopics = [], equipment = null, dualCamera = null) {
     const groups = [
       ['课程', 'lesson', data.lessons || [], item => item.subtitle],
       ['实拍任务', 'practice', data.tasks || [], item => item.description],
@@ -31,6 +31,10 @@
     if (equipment) index.push({id:equipment.id, type:'手头器材', title:equipment.title,
       description:equipment.camera.name+' · '+equipment.lenses.map(lens=>lens.name).join(' / '),
       href:'#kit', titleKey:normalize(equipment.title), text:normalize(words(equipment)+' 小痰盂 18-150 18–150 RF50mmf1.8stm 两支镜头')});
+    if (dualCamera) index.push({id:dualCamera.id, type:'可选双机', title:dualCamera.title,
+      description:'如果增加 EOS R7 · '+dualCamera.intro,
+      href:'#kit/r6-r7', titleKey:normalize(dualCamera.title),
+      text:normalize(words(dualCamera)+' R7 R6 三代 双机 小痰盂 18-150 18–150 RF50mmf1.8stm')});
     return index;
   }
   function search(index, query, limit = 30) {

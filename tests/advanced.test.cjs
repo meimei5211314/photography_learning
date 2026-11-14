@@ -7,7 +7,7 @@ const vm=require('node:vm');
 const L=require('../learning.js');
 const original=require('./fixtures/v2-content-contract.json');
 const context={window:{}};
-for(const file of ['data.js','advanced-data.js','field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','glossary.js','media.js','media-v3.js','field-guide.js','histogram.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
+for(const file of ['data.js','advanced-data.js','field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','dual-camera-lessons.js','dual-camera-data.js','glossary.js','media.js','media-v3.js','field-guide.js','histogram.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
 const D=context.window.PHOTO_DATA,A=context.window.PHOTO_ADVANCED,M=context.window.PHOTO_MEDIA;
 const plain=x=>JSON.parse(JSON.stringify(x));
 
@@ -52,6 +52,7 @@ test('six scenarios connect real media, complete decisions, lessons and saved ta
 test('specialty course entry links resolve to implemented routes and real content',()=>{
   const validRoute=href=>{
     const [page,id]=href.replace(/^#/,'').split('/');
+    if(page==='kit')return !id||id==='r6-r7';
     if(page==='lesson')return D.lessons.some(l=>l.id===id);
     if(page==='cases')return !id||A.cases.some(c=>c.id===id);
     if(page==='practice')return !id||D.tasks.some(t=>t.id===id);
