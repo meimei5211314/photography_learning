@@ -1,0 +1,24 @@
+# 内容完整性增强实施方案
+
+## 数据与内容
+
+- `field-data.js` 在 `advanced-data.js` 后、媒体映射之前加载；追加 stage 5 的 `metering-histogram`、`sharpness-diagnosis`、`landscape-long-exposure`、`export-backup` 四课及对应任务/卡片。PHOTO_FIELD 导出新增数据与来源，沿用现有 PHOTO_DATA 结构及学习状态 v2。
+- 新任务 ID：`metering-bracket`、`sharpness-check`、`landscape-pair`、`export-verify`。复用现有图片并显式设置 mediaId。新增事实引用记录于 `docs/18-completeness-sources.md`。
+- `field-guide.js/css` 提供 `PhotoFieldGuide.mount(container, id)` / destroy 及可搜索的诊断数据，路线 `#diagnose` / `#diagnose/<id>`。不伪装成图片自动分析：由学习者选择自己观察到的现象，逐项验证。
+- 扩充 `visual-practice.js` 的题库，复用已署名的专题照片、保持原题 ID，并检查图片证据不超出画面可观察信息。任务复盘区提供意图/条件/参数/变量/证据/下次行动提示，插入模板须保留已有笔记。
+
+## 进度可靠性
+
+独立 `progress-store.js` 封装读取、保存与变更检测，保持原 localStorage key 和备份格式。提交前比对上次读取的原始值，发现外部变化时阻止整份覆盖；storage/visibility 事件用于及时提醒。保留当前内存记录以便导出，明确提示可重新载入其他页面记录。导入须在存储写入成功后切换当前状态，异常原始记录保护仍保留。保存返回明确结果，所有成功提示必须以保存成功为条件。覆盖失败、并发变化、损坏记录与导入恢复的测试。
+
+## 集成与可发现性
+
+根代理负责入口脚本顺序、首页和导航、第五阶段、扩展搜索、README、CI、最终测试及验证文档。搜索做独立纯数据模块 `search.js`，包含课程、任务、案例及排障结果和类型标记，支持空查询建议与无结果提示。排障作为知识速查附近的入口，避免将技术实现细节展示给学习者。
+
+## 验证与提交
+
+先提交需求与方案，再按内容/可靠性/集成分步提交；所有改动只在本地，不推送。内容测试加载新增数据并检查 22/18/44，保留原有兼容性断言；增加有实际行为约束的搜索、排障和存储测试。PR 工作流仅验证/打包，无 Pages 写权限或部署步骤。浏览器检查桌面/窄屏、file://、深链接、搜索、存储失败与多标签页冲突；未能验证的部分如实记录。
+
+## 实施中发现的缺陷
+
+此节先记录验证发现的缺陷与修复方式，再修改对应代码。
