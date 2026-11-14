@@ -13,7 +13,7 @@
     if (value && typeof value === 'object') return Object.values(value).map(words).join(' ');
     return '';
   }
-  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = [], cameraTopics = [], equipment = null, dualCamera = null) {
+  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = [], cameraTopics = [], equipment = null, dualCamera = null, comparison = null) {
     const groups = [
       ['课程', 'lesson', data.lessons || [], item => item.subtitle],
       ['实拍任务', 'practice', data.tasks || [], item => item.description],
@@ -35,6 +35,12 @@
       description:'如果增加 EOS R7 · '+dualCamera.intro,
       href:'#kit/r6-r7', titleKey:normalize(dualCamera.title),
       text:normalize(words(dualCamera)+' R7 R6 三代 双机 小痰盂 18-150 18–150 RF50mmf1.8stm')});
+    if (comparison) for (const topic of [comparison.basics, ...comparison.topics]) {
+      const title = 'R7 / R6 三代 · '+topic.title;
+      index.push({id:topic.id,type:'换机配置',title,description:topic.summary,
+        href:'#camera-compare/'+topic.id,titleKey:normalize(title),
+        text:normalize('R7 R6 三代 R6 Mark III 换机 配置 对照 '+words(topic))});
+    }
     return index;
   }
   function search(index, query, limit = 30) {

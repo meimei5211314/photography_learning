@@ -25,7 +25,7 @@
   function cameraManualEntry(){
     const topics=root.PHOTO_CAMERA_CONFIG?.topics||[];
     if(!topics.length)return '';
-    return `<section class="camera-manual-entry"><h2>按问题查配置</h2><p>先用下面 8 步完成一次拍摄；需要细查菜单时，按主题看选项、操作、试拍检查和恢复方法。</p><a class="primary" href="#camera/controls">查看详细操作手册 →</a><details><summary>展开全部 ${topics.length} 个配置主题</summary><nav aria-label="详细配置主题">${topics.map(topic=>`<a href="#camera/${encodeURIComponent(topic.id)}">${esc(topic.title)}</a>`).join('')}</nav></details></section>`;
+    return `<section class="camera-manual-entry"><h2>按问题查配置</h2><p>先用下面 8 步完成一次拍摄；需要细查菜单时，按主题看选项、操作、试拍检查和恢复方法。</p><a class="primary" href="#camera/controls">查看详细操作手册 →</a><p class="camera-compare-entry"><a href="#camera-compare">R7 与 R6 三代：基础参数和12项配置对照 →</a></p><details><summary>展开全部 ${topics.length} 个配置主题</summary><nav aria-label="详细配置主题">${topics.map(topic=>`<a href="#camera/${encodeURIComponent(topic.id)}">${esc(topic.title)}</a>`).join('')}</nav></details></section>`;
   }
   function cameraKitEntry(){
     if(!root.PHOTO_EQUIPMENT)return '';

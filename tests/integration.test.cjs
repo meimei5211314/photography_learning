@@ -13,7 +13,7 @@ const kitBaseline = require('./fixtures/curriculum-40-contract.json');
 const learning = require('../learning.js');
 const root = path.resolve(__dirname, '..');
 const context = { window: {} };
-for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','dual-camera-lessons.js','dual-camera-data.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
+for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','dual-camera-lessons.js','dual-camera-data.js','r7-foundation-config.js','r7-advanced-config.js','camera-comparison-data.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
   vm.runInNewContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
 }
 const D = context.window.PHOTO_DATA;
@@ -24,8 +24,10 @@ const paths = context.window.PhotoPaths.items;
 const cameraTopics = context.window.PHOTO_CAMERA_CONFIG.topics;
 const equipment = context.window.PHOTO_EQUIPMENT;
 const dualCamera = context.window.PHOTO_DUAL_CAMERA;
+const comparison = context.window.PHOTO_CAMERA_COMPARISON;
 const plain = value => JSON.parse(JSON.stringify(value));
 const supported = {
+  'camera-compare': new Set(['basics',...comparison.topics.map(x=>x.id)]),
   kit: new Set(['r6-r7']),
   camera: new Set(cameraTopics.map(item=>item.id)),
   paths: new Set(paths.map(item=>item.id)),
@@ -38,7 +40,7 @@ function assertLink(href) {
   const [page, arg] = href.slice(1).split('/');
   assert.ok(href.startsWith('#'), href);
   if (arg) assert.ok(supported[page]?.has(arg), 'broken internal link: ' + href);
-  else assert.ok(['home', 'camera', 'cases', 'lab', 'observe', 'practice', 'review', 'reference', 'settings', 'edit', 'diagnose', 'histogram', 'paths', 'kit'].includes(page), href);
+  else assert.ok(['home', 'camera', 'cases', 'lab', 'observe', 'practice', 'review', 'reference', 'settings', 'edit', 'diagnose', 'histogram', 'paths', 'kit', 'camera-compare'].includes(page), href);
 }
 
 test('all v3 learning identities and saved task criterion positions remain compatible', () => {
@@ -191,4 +193,24 @@ test('optional dual-camera profile is reachable, searchable and independent of t
   const legacy=buildIndex(D,cases,diagnoses,histograms,paths,cameraTopics,equipment);
   assert.ok(!legacy.some(item=>item.type==='可选双机'));
   assert.equal(index.length,legacy.length+1);
+});
+
+test('R7 comparison adds thirteen searchable topics with valid practice links and unchanged state',()=>{
+  const oldIndex=buildIndex(D,cases,diagnoses,histograms,paths,cameraTopics,equipment,dualCamera);
+  const index=buildIndex(D,cases,diagnoses,histograms,paths,cameraTopics,equipment,dualCamera,comparison);
+  assert.equal(index.length,oldIndex.length+13);
+  assert.equal(index.filter(x=>x.type==='换机配置').length,13);
+  for(const item of index)assertLink(item.href);
+  for(const topic of comparison.topics)for(const model of [topic.r6,topic.r7]){
+    assertLink('#practice/'+model.taskId);for(const id of model.lessonIds)assertLink('#lesson/'+id);
+  }
+  for(const [term,id]of [['R7 ISO','auto-iso'],['R7 回放','playback'],['R7 电池','basics'],['R7 LOCK','custom-controls'],['R7 C1','custom-modes']]){
+    assert.ok(search(index,term).some(x=>x.href==='#camera-compare/'+id),term);
+  }
+  const before=learning.freshState();before.completed=D.lessons.map(x=>x.id);
+  for(const task of D.tasks)before.tasks[task.id]={completed:true,checks:task.criteria.map((_,i)=>i),note:'换机详细配置前的实拍记录'};
+  for(const card of D.cards)before.reviews[card.id]={step:2,due:1794790800000,lastReviewed:1794531600000};
+  for(const lesson of D.lessons)before.quiz[lesson.id]=true;
+  const after=learning.validateState(before,D.lessons.map(x=>x.id),D.tasks.map(x=>x.id),D.cards.map(x=>x.id));
+  assert.deepEqual(after,plain(before));
 });

@@ -18,6 +18,7 @@ const equipmentLessonIds = ['prime-working-distance', 'zoom-range-map', 'two-len
 const equipmentTaskIds = ['prime-distance-focus', 'zoom-aperture-map', 'matched-lens-pairs', 'two-lens-field-story'];
 const dualLessonIds = ['dual-body-assignment', 'dual-body-controls', 'dual-body-field-workflow'];
 const dualTaskIds = ['dual-body-pairing-test', 'dual-body-switch-check', 'dual-body-story'];
+const comparisonScreenshotStyle = '.skip-link:not(:focus){visibility:hidden !important;}';
 let server, browser;
 function availablePort() {
   return new Promise((resolve, reject) => {
@@ -171,6 +172,80 @@ async function checkCameraManual(base, errors) {
     await activateWithKeyboard(page, '#camera-next');
     assert.equal(await page.locator('[data-camera-step="1"]').getAttribute('aria-pressed'), 'true', 'quick start still responds once after manual unmount');
     assert.equal(await page.evaluate(key => localStorage.getItem(key), key), savedBefore, 'manual, quick start and related links preserve the exact existing record');
+  } finally { await isolated.close(); }
+}
+async function checkCameraComparison(base, errors) {
+  const isolated = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await isolated.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(base + '/#camera');
+    const original = { version: 2, completed: ['camera', 'dual-body-controls'], tasks: { 'dual-body-switch-check': { checks: [0], completed: false, note: '换机前已有的真实记录' } }, reviews: {}, quiz: { camera: true }, diagnostics: {} };
+    await page.evaluate(({ key, record }) => localStorage.setItem(key, JSON.stringify(record)), { key, record: original });
+    await page.reload();
+    const savedBefore = await page.evaluate(key => localStorage.getItem(key), key);
+    await activateWithKeyboard(page, '.camera-compare-entry a[href="#camera-compare"]');
+    await page.locator('[data-compare-topic="basics"]').waitFor();
+    await assertFocus(page, '#main', 'comparison entry focuses main');
+    assert.equal(await page.locator('.nav-link[href="#camera"]').getAttribute('aria-current'), 'page');
+    assert.equal(await page.locator('.cc-directory[open] nav a').count(), 13);
+    const basics = await page.evaluate(() => ({ specs: PHOTO_CAMERA_COMPARISON.basics.specs.length, setup: PHOTO_CAMERA_COMPARISON.basics.setup.map(item => item.title) }));
+    assert.equal(await page.locator('[data-compare-spec]').count(), basics.specs);
+    assert.equal(await page.locator('[data-compare-setup]').count(), basics.setup.length);
+    assert.deepEqual(await page.locator('[data-compare-setup]>h3').allTextContents(), basics.setup, 'setup titles have no extra generated numbering');
+    await activateWithKeyboard(page, '.cc-directory a[href="#camera-compare/controls"]');
+    await page.locator('[data-compare-topic="controls"]').waitFor();
+    await activateWithKeyboard(page, '.cc-directory>summary');
+    await activateWithKeyboard(page, '.cc-directory a[href="#camera-compare/playback"]');
+    await page.locator('[data-compare-topic="playback"]').waitFor();
+    await page.reload();
+    await page.locator('[data-compare-topic="playback"]').waitFor();
+    await page.goBack();
+    await page.locator('[data-compare-topic="controls"]').waitFor();
+    await page.goForward();
+    await page.locator('[data-compare-topic="playback"]').waitFor();
+    const topics = await page.evaluate(() => PHOTO_CAMERA_COMPARISON.topics.map(topic => ({ id: topic.id, title: topic.title, differences: topic.differences.length, r6: { steps: topic.r6.steps.length, settings: topic.r6.settings.length, taskId: topic.r6.taskId }, r7: { steps: topic.r7.steps.length, settings: topic.r7.settings.length, taskId: topic.r7.taskId } })));
+    assert.equal(topics.length, 12);
+    for (const topic of topics) {
+      await route(page, 'camera-compare/' + topic.id);
+      await checkPage(page, 'comparison ' + topic.id);
+      assert.equal(await page.locator('main h1').innerText(), topic.title);
+      assert.equal(await page.locator('.cc-directory a[aria-current="page"]').getAttribute('href'), '#camera-compare/' + topic.id);
+      assert.equal(await page.locator('.cc-differences>ul>li').count(), topic.differences);
+      for (const model of ['r6', 'r7']) {
+        assert.equal(await page.locator(`.cc-steps [data-camera-model="${model}"] ol>li`).count(), topic[model].steps);
+        assert.equal(await page.locator(`.cc-settings [data-camera-model="${model}"] .cc-setting-list>div`).count(), topic[model].settings);
+        assert.equal(await page.locator(`.cc-practice [data-camera-model="${model}"] .cc-task`).getAttribute('href'), '#practice/' + topic[model].taskId);
+        assert.ok(await page.locator(`.cc-sources [data-camera-model="${model}"] a[href^="https://cam.start.canon/"]`).count());
+      }
+      for (const phase of ['settings', 'steps', 'checks', 'pitfalls', 'restore', 'practice', 'sources']) {
+        assert.deepEqual(await page.locator(`.cc-${phase} .cc-model>h3`).allTextContents(), ['EOS R6 Mark III', 'EOS R7']);
+      }
+      await activateWithKeyboard(page, '.cc-switch-checklist>summary');
+      assert.equal(await page.locator('.cc-switch-checklist').evaluate(el => el.open), true);
+      await assertFocus(page, '.cc-switch-checklist>summary', 'switch checklist retains native keyboard focus');
+      await activateWithKeyboard(page, '.cc-switch-checklist>summary');
+    }
+    await route(page, 'camera-compare/controls');
+    await activateWithKeyboard(page, '.cc-original');
+    await page.locator('[data-camera-topic="controls"]').waitFor();
+    await activateWithKeyboard(page, '.cm-compare-entry a');
+    await page.locator('[data-compare-topic="controls"]').waitFor();
+    await activateWithKeyboard(page, '.cc-neighbors a[href="#camera-compare/quality"]');
+    await page.locator('[data-compare-topic="quality"]').waitFor();
+    await page.locator('.cc-practice [data-camera-model="r7"] .cc-task').click();
+    await page.locator(`#task-${topics.find(item => item.id === 'quality').r7.taskId} details[open]`).waitFor();
+    await route(page, 'kit/r6-r7');
+    await activateWithKeyboard(page, '.eg-heading a[href="#camera-compare"]');
+    await page.locator('[data-compare-topic="basics"]').waitFor();
+    await route(page, 'camera-compare/not-a-topic');
+    await checkPage(page, 'unknown comparison');
+    assert.match(await page.locator('.cc-missing').innerText(), /没有找到这个配置主题/);
+    assert.equal(await page.locator('.cc-directory[open] nav a').count(), 13);
+    assert.equal(await page.locator('.cc-directory a[aria-current]').count(), 0);
+    await activateWithKeyboard(page, '.cc-directory a[href="#camera-compare/basics"]');
+    await page.locator('[data-compare-topic="basics"]').waitFor();
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), key), savedBefore, 'all comparison pages, history and linked practices preserve the exact stored record');
   } finally { await isolated.close(); }
 }
 async function checkParameterTables(page, mobile = false) {
@@ -795,8 +870,9 @@ async function main() {
     ...PhotoHistogram.scenarios.map(x => 'histogram/' + x.id),
     ...PhotoPaths.items.map(x => 'paths/' + x.id),
     ...PHOTO_CAMERA_CONFIG.topics.map(x => 'camera/' + x.id),
+    ...[PHOTO_CAMERA_COMPARISON.basics, ...PHOTO_CAMERA_COMPARISON.topics].map(x => 'camera-compare/' + x.id),
     ...taskIds.map(id => 'practice/' + id),
-    'diagnose', 'camera', 'kit', 'kit/r6-r7', 'kit/not-a-topic', 'cases', 'lab', 'histogram', 'paths', 'practice', 'review', 'observe', 'edit', 'reference', 'settings'
+    'diagnose', 'camera', 'camera-compare', 'camera-compare/not-a-topic', 'kit', 'kit/r6-r7', 'kit/not-a-topic', 'cases', 'lab', 'histogram', 'paths', 'practice', 'review', 'observe', 'edit', 'reference', 'settings'
   ], [...equipmentTaskIds, ...dualTaskIds]);
   for (const hash of routes) { await route(page, hash); await checkPage(page, hash); }
   await route(page, 'paths/first-session');
@@ -806,6 +882,12 @@ async function main() {
   await page.locator('.parameter-table-section').screenshot({ path: path.join(output, 'camera-parameters-desktop.png') });
   await route(page, 'camera/auto-iso');
   await page.screenshot({ path: path.join(output, 'camera-config-desktop.png'), fullPage: true });
+  for (const id of ['basics', 'controls', 'playback']) {
+    await route(page, 'camera-compare/' + id);
+    await page.locator('#main').focus();
+    await page.screenshot({ style: comparisonScreenshotStyle, path: path.join(output, 'camera-compare-' + id + '-desktop.png'), fullPage: true });
+    if (id !== 'basics') await page.locator('.cc-steps').screenshot({ style: comparisonScreenshotStyle, path: path.join(output, 'camera-compare-' + id + '-steps-desktop.png') });
+  }
   await route(page, 'kit');
   await page.screenshot({ path: path.join(output, 'equipment-desktop.png'), fullPage: true });
   await route(page, 'kit/r6-r7');
@@ -846,6 +928,13 @@ async function main() {
   assert.ok(await page.locator('.search-result[href="#camera/auto-iso"]').count(), 'configuration topics are searchable');
   await page.locator('.search-result[href="#camera/auto-iso"]').click();
   await page.locator('[data-camera-topic="auto-iso"]').waitFor();
+  for (const [term, id] of [['R7 ISO', 'auto-iso'], ['R7 回放', 'playback']]) {
+    await page.locator('#search-button').click();
+    await page.locator('#search-input').fill(term);
+    assert.ok(await page.locator(`.search-result[href="#camera-compare/${id}"]`).count(), 'model-specific configuration is searchable by ' + term);
+    await page.locator(`.search-result[href="#camera-compare/${id}"]`).click();
+    await page.locator(`[data-compare-topic="${id}"]`).waitFor();
+  }
   for (const term of ['小痰盂', '18-150', 'RF50']) {
     await page.locator('#search-button').click();
     await page.locator('#search-input').fill(term);
@@ -916,6 +1005,35 @@ async function main() {
   await route(page, 'lesson/exposure');
   await page.locator('.parameter-table-section').screenshot({ path: path.join(output, 'camera-parameters-mobile.png') });
   const cameraRoutes = await page.evaluate(() => ['camera', ...PHOTO_CAMERA_CONFIG.topics.map(topic => 'camera/' + topic.id), 'camera/not-a-topic']);
+  const comparisonRoutes = await page.evaluate(() => ['camera-compare', ...[PHOTO_CAMERA_COMPARISON.basics, ...PHOTO_CAMERA_COMPARISON.topics].map(topic => 'camera-compare/' + topic.id), 'camera-compare/not-a-topic']);
+  for (const hash of comparisonRoutes) {
+    await route(page, hash);
+    await checkPage(page, 'mobile ' + hash);
+    if (!await page.locator('.cc-directory').evaluate(el => el.open)) await activateWithKeyboard(page, '.cc-directory>summary');
+    assert.equal(await page.locator('.cc-directory[open] nav a').count(), 13);
+    if (await page.locator('.cc-switch-checklist').count()) await activateWithKeyboard(page, '.cc-switch-checklist>summary');
+    await checkPage(page, 'mobile expanded ' + hash);
+  }
+  for (const id of ['basics', 'controls', 'playback']) {
+    await route(page, 'camera-compare/' + id);
+    await page.locator('#main').focus();
+    await page.screenshot({ style: comparisonScreenshotStyle, path: path.join(output, 'camera-compare-' + id + '-mobile.png'), fullPage: true });
+    if (id === 'basics') {
+      const firstRow = page.locator('[data-compare-spec]').first();
+      await firstRow.screenshot({ style: comparisonScreenshotStyle, path: path.join(output, 'camera-compare-spec-mobile.png') });
+      assert.equal(await firstRow.evaluate(el => getComputedStyle(el).display), 'block');
+      for (const label of ['EOS R6 Mark III', 'EOS R7', '换机时怎样理解']) {
+        const cell = firstRow.locator(`[data-label="${label}"]`);
+        assert.ok((await cell.evaluate(el => getComputedStyle(el, '::before').content)).includes(label), 'mobile parameter cell repeats its model or purpose label');
+      }
+    } else {
+      const grid = page.locator('.cc-steps .cc-model-grid');
+      const cards = await grid.locator('.cc-model').evaluateAll(elements => elements.map(el => ({ top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom, right: el.getBoundingClientRect().right })));
+      assert.equal(cards.length, 2);
+      assert.ok(cards[1].top >= cards[0].bottom && cards.every(card => card.right <= page.viewportSize().width), 'mobile ' + id + ' keeps same-phase model panels stacked inside the viewport');
+      await page.locator('.cc-steps').screenshot({ style: comparisonScreenshotStyle, path: path.join(output, 'camera-compare-' + id + '-steps-mobile.png') });
+    }
+  }
   for (const hash of cameraRoutes) {
     await route(page, hash);
     await checkPage(page, 'mobile ' + hash);
@@ -942,6 +1060,10 @@ async function main() {
   await checkHistograms(offline);
   for (const hash of ['paths', ...(await offline.evaluate(() => PhotoPaths.items.map(item => 'paths/' + item.id)))]) { await route(offline, hash); await checkPage(offline, 'file ' + hash); }
   for (const hash of cameraRoutes) { await route(offline, hash); await checkPage(offline, 'file ' + hash); }
+  for (const hash of comparisonRoutes) { await route(offline, hash); await checkPage(offline, 'file ' + hash); }
+  await route(offline, 'camera-compare/playback');
+  await offline.reload();
+  await offline.locator('[data-compare-topic="playback"]').waitFor();
   await route(offline, 'camera/auto-iso');
   await offline.reload();
   await offline.locator('[data-camera-topic="auto-iso"]').waitFor();
@@ -957,6 +1079,7 @@ async function main() {
   await offline.locator('[data-kit-profile="r6-r7"]').waitFor();
   await checkEquipment(base, errors);
   await checkCameraManual(base, errors);
+  await checkCameraComparison(base, errors);
   await checkLearningPaths(base, errors);
   await checkKeyboard(base, errors);
   await checkPhotoFailures(base, errors);
@@ -965,7 +1088,7 @@ async function main() {
   await checkMultipleTabs(base, errors);
   await checkDeferredImport(base, errors);
   assert.deepEqual(errors, [], 'no uncaught browser errors');
-  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, learningPaths: 6, pathContextAndRestore: true, cameraTopics: 12, parameterTables: 8, cameraHistoryAndRecords: true, equipmentHub: true, equipmentScenarios: 6, equipmentLessons: 4, optionalDualCamera: true, dualCameraLessons: 3, profileSwitchAndHistory: true, equipmentRecordsPreserved: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, learningPaths: 6, pathContextAndRestore: true, cameraTopics: 12, parameterTables: 8, cameraHistoryAndRecords: true, comparisonTopics: 13, comparisonHistoryAndRecords: true, comparisonMobileLabels: true, equipmentHub: true, equipmentScenarios: 6, equipmentLessons: 4, optionalDualCamera: true, dualCameraLessons: 3, profileSwitchAndHistory: true, equipmentRecordsPreserved: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
 }
 main().catch(async error => {
   console.error(error);

@@ -31,7 +31,7 @@
     const task = data.tasks.find(item => item.id === topic.taskId);
     const previous = topics[index - 1], next = topics[index + 1];
     container.innerHTML = `<article class="cm-root cm-detail" data-camera-topic="${esc(topic.id)}">
-      <header class="cm-heading">${back}<p class="cm-kicker">相机配置手册 · ${String(index + 1).padStart(2, '0')} / ${topics.length} · ${esc(topic.group)}</p><h1>${esc(topic.title)}</h1><p class="cm-summary">${esc(topic.summary)}</p><p class="cm-meta">${esc(config.model)} · 资料核对于 ${esc(config.checkedAt)}。以下以静止图像和默认控制为例；自定义后以机身为准。</p></header>
+      <header class="cm-heading">${back}<p class="cm-compare-entry"><a href="#camera-compare/${encodeURIComponent(topic.id)}">对照 R7 的同一项设置 →</a></p><p class="cm-kicker">相机配置手册 · ${String(index + 1).padStart(2, '0')} / ${topics.length} · ${esc(topic.group)}</p><h1>${esc(topic.title)}</h1><p class="cm-summary">${esc(topic.summary)}</p><p class="cm-meta">${esc(config.model)} · 资料核对于 ${esc(config.checkedAt)}。以下以静止图像和默认控制为例；自定义后以机身为准。</p></header>
       ${directory(topics, topic.id)}
       <section class="cm-section cm-settings"><h2>选项与取舍</h2><table role="table"><caption>${esc(topic.title)}：设置对照</caption><thead role="rowgroup"><tr role="row"><th scope="col">设置项</th><th scope="col">选项或起点</th><th scope="col">为什么这样选</th></tr></thead><tbody role="rowgroup">${(topic.settings || []).map(setting => `<tr role="row"><th scope="row" role="rowheader">${esc(setting.name)}</th><td role="cell" data-label="选项或起点">${esc(setting.value)}</td><td role="cell" data-label="为什么这样选">${esc(setting.reason)}</td></tr>`).join('')}</tbody></table></section>
       <section class="cm-section cm-steps"><h2>拿起相机，逐步操作</h2><ol>${list(topic.steps)}</ol></section>
