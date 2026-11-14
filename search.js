@@ -13,7 +13,7 @@
     if (value && typeof value === 'object') return Object.values(value).map(words).join(' ');
     return '';
   }
-  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = [], cameraTopics = []) {
+  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = [], cameraTopics = [], equipment = null) {
     const groups = [
       ['课程', 'lesson', data.lessons || [], item => item.subtitle],
       ['实拍任务', 'practice', data.tasks || [], item => item.description],
@@ -24,10 +24,14 @@
       ['学习路径', 'paths', paths, item => item.summary],
       ['相机配置', 'camera', cameraTopics, item => item.summary]
     ];
-    return groups.flatMap(([type, route, items, describe]) => items.map(item => ({
+    const index = groups.flatMap(([type, route, items, describe]) => items.map(item => ({
       id: item.id, type, title: item.title, description: describe(item) || '',
       href: `#${route}/${item.id}`, titleKey: normalize(item.title), text: normalize(words(item))
     })));
+    if (equipment) index.push({id:equipment.id, type:'手头器材', title:equipment.title,
+      description:equipment.camera.name+' · '+equipment.lenses.map(lens=>lens.name).join(' / '),
+      href:'#kit', titleKey:normalize(equipment.title), text:normalize(words(equipment)+' 小痰盂 18-150 18–150 RF50mmf1.8stm 两支镜头')});
+    return index;
   }
   function search(index, query, limit = 30) {
     if (!Number.isInteger(limit) || limit < 1) return [];

@@ -12,7 +12,7 @@ const cameraBaseline = require('./fixtures/curriculum-36-contract.json');
 const learning = require('../learning.js');
 const root = path.resolve(__dirname, '..');
 const context = { window: {} };
-for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
+for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
   vm.runInNewContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
 }
 const D = context.window.PHOTO_DATA;
@@ -21,6 +21,7 @@ const diagnoses = context.window.PhotoFieldGuide.items;
 const histograms = context.window.PhotoHistogram.scenarios;
 const paths = context.window.PhotoPaths.items;
 const cameraTopics = context.window.PHOTO_CAMERA_CONFIG.topics;
+const equipment = context.window.PHOTO_EQUIPMENT;
 const plain = value => JSON.parse(JSON.stringify(value));
 const supported = {
   camera: new Set(cameraTopics.map(item=>item.id)),
@@ -34,7 +35,7 @@ function assertLink(href) {
   const [page, arg] = href.slice(1).split('/');
   assert.ok(href.startsWith('#'), href);
   if (arg) assert.ok(supported[page]?.has(arg), 'broken internal link: ' + href);
-  else assert.ok(['home', 'camera', 'cases', 'lab', 'observe', 'practice', 'review', 'reference', 'settings', 'edit', 'diagnose', 'histogram', 'paths'].includes(page), href);
+  else assert.ok(['home', 'camera', 'cases', 'lab', 'observe', 'practice', 'review', 'reference', 'settings', 'edit', 'diagnose', 'histogram', 'paths', 'kit'].includes(page), href);
 }
 
 test('all v3 learning identities and saved task criterion positions remain compatible', () => {
@@ -58,8 +59,8 @@ test('all 22 previous lessons and 18 task records survive the new curriculum wit
 });
 test('new learning paths and all search results point to supported pages and actual records', () => {
   for (const lesson of D.lessons) for (const related of lesson.related || []) assertLink(related.href);
-  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics);
-  assert.equal(index.length, D.lessons.length + D.tasks.length + cases.length + diagnoses.length + histograms.length + D.glossary.length + paths.length + cameraTopics.length);
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment);
+  assert.equal(index.length, D.lessons.length + D.tasks.length + cases.length + diagnoses.length + histograms.length + D.glossary.length + paths.length + cameraTopics.length + 1);
   for (const item of index) assertLink(item.href);
   for (const keyword of ['直方图', '清晰', '导出', '长曝光', 'RAW', '闪光', '近摄', '夜景', '组照', '滚动快门', '滤镜', '追随', '蒙版', '软打样']) {
     assert.ok(search(index, keyword).length > 0, keyword + ' must be discoverable');
@@ -107,11 +108,11 @@ test('foundation goals and prerequisites lead to actual practice without circula
 });
 
 test('camera detail preserves all 36 lesson identities, quiz meanings and 32 saved task checklists', () => {
-  assert.deepEqual(plain(D.lessons.map(item=>item.id)), cameraBaseline.lessons);
-  assert.deepEqual(plain(D.cards.map(item=>item.id)), cameraBaseline.cards);
+  assert.deepEqual(plain(D.lessons.slice(0,cameraBaseline.lessons.length).map(item=>item.id)), cameraBaseline.lessons);
+  assert.deepEqual(plain(D.cards.slice(0,cameraBaseline.cards.length).map(item=>item.id)), cameraBaseline.cards);
   const before = learning.freshState();
   before.completed = [...cameraBaseline.lessons];
-  for (const lesson of D.lessons) {
+  for (const lesson of D.lessons.filter(item=>cameraBaseline.lessons.includes(item.id))) {
     assert.deepEqual(plain(lesson.quiz), cameraBaseline.quiz[lesson.id], lesson.id+' saved answer meaning');
     before.quiz[lesson.id] = true;
   }
@@ -124,7 +125,7 @@ test('camera detail preserves all 36 lesson identities, quiz meanings and 32 sav
 });
 
 test('all camera configurations link to real lessons and tasks and can be found through setting names', () => {
-  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics);
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment);
   assert.equal(cameraTopics.length,12);
   for (const topic of cameraTopics) {
     assertLink('#camera/'+topic.id);
@@ -135,4 +136,22 @@ test('all camera configurations link to real lessons and tasks and can be found 
   for (const term of ['ISO','白平衡','伺服','C1','快门','回放']) {
     assert.ok(search(index, term).some(item=>item.type==='相机配置'),term);
   }
+});
+
+test('confirmed kit and four lens courses are discoverable without marking new practice complete', () => {
+  assertLink('#kit');
+  assert.equal(equipment.camera.name,'EOS R6 Mark III');
+  assert.equal(equipment.lenses.length,2);
+  for (const lens of equipment.lenses) assertLink('#lesson/'+lens.lessonId);
+  for (const scenario of equipment.scenarios) assertLink('#lesson/'+scenario.lessonId);
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics, equipment);
+  for (const term of ['小痰盂','18-150','RF50','RF50mmf1.8stm']) {
+    assert.ok(search(index, term).some(item=>item.href==='#kit'),term+' kit entry');
+  }
+  const state = learning.freshState();
+  state.completed = [...cameraBaseline.lessons];
+  for (const task of cameraBaseline.tasks) state.tasks[task.id] = {completed:true,checks:task.criteria.map((_,i)=>i),note:'以前的器材实拍记录'};
+  const restored = learning.validateState(state,D.lessons.map(x=>x.id),D.tasks.map(x=>x.id),D.cards.map(x=>x.id));
+  for (const lesson of D.lessons.filter(item=>item.stage===10)) assert.ok(!restored.completed.includes(lesson.id));
+  for (const id of ['prime-distance-focus','zoom-aperture-map','matched-lens-pairs','two-lens-field-story']) assert.equal(restored.tasks[id],undefined);
 });

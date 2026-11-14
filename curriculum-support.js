@@ -59,4 +59,8 @@
     const lesson = data.lessons.find(item => item.id === id);
     lesson.related = [...(lesson.related || []), {label:'逐项设置：入口、检查与恢复', href:'#camera/' + topic}];
   }
+  for (const id of ['camera','lens','aperture','focus','r6-start','portrait','street','lens-system','closeup','sensor-raw']) {
+    const lesson = data.lessons.find(item => item.id === id);
+    lesson.related = [...(lesson.related || []), {label:'用你的 RF50 与 RF-S18–150 实拍', href:'#kit'}];
+  }
 })(typeof window !== 'undefined' ? window : globalThis);

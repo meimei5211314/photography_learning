@@ -14,6 +14,8 @@ catch { console.error('请提供测试用 Playwright：设置 PLAYWRIGHT_MODULE 
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, '.validation', 'browser');
 const key = 'field-notes-photography-v1';
+const equipmentLessonIds = ['prime-working-distance', 'zoom-range-map', 'two-lens-comparison', 'two-lens-outing'];
+const equipmentTaskIds = ['prime-distance-focus', 'zoom-aperture-map', 'matched-lens-pairs', 'two-lens-field-story'];
 let server, browser;
 function availablePort() {
   return new Promise((resolve, reject) => {
@@ -189,6 +191,69 @@ async function checkParameterTables(page, mobile = false) {
     }
     assert.ok(await page.locator('.reading-main a[href^="#camera/"]').count(), id + ' connects the principle to its camera configuration');
   }
+}
+async function checkEquipment(base, errors) {
+  const isolated = await browser.newContext();
+  const page = await isolated.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(base + '/#home');
+    const existing = { version: 2, completed: ['camera'], tasks: { 'three-apertures': { checks: [0], completed: false, note: '原镜头练习记录保持不变。' } }, reviews: {}, quiz: { camera: true }, diagnostics: {} };
+    await page.evaluate(({ key, existing }) => localStorage.setItem(key, JSON.stringify(existing)), { key, existing });
+    await page.reload();
+    const savedBefore = await page.evaluate(key => localStorage.getItem(key), key);
+    await activateWithKeyboard(page, '.kit-home-entry a[href="#kit"]');
+    await page.locator('.eg-root').waitFor();
+    await checkPage(page, 'equipment hub');
+    await assertFocus(page, '#main', 'equipment entrance focuses main');
+    assert.equal(await page.locator('#navigation .nav-link').count(), 9, 'equipment hub keeps the existing nine main navigation entries');
+    assert.equal(await page.locator('.nav-link[href="#home"]').getAttribute('aria-current'), 'page');
+    assert.equal(await page.locator('[data-equipment-lens]').count(), 2);
+    assert.equal(await page.locator('[data-equipment-scene]').count(), 6);
+    assert.equal(await page.locator('[data-equipment-lesson]').count(), 4);
+    assert.equal(await page.locator('.eg-angle-table tbody tr').count(), 7);
+    assert.match(await page.locator('.eg-record-area figcaption').innerText(), /原创记录区域示意.*非样片或光学仿真/);
+    const geometry = await page.evaluate(() => {
+      const full = document.querySelector('[data-eg-frame="full"]').getBBox();
+      const crop = document.querySelector('[data-eg-frame="crop"]').getBBox();
+      return { width: crop.width / full.width, height: crop.height / full.height, x: crop.x + crop.width / 2 - full.x - full.width / 2, y: crop.y + crop.height / 2 - full.y - full.height / 2 };
+    });
+    assert.deepEqual(geometry, { width: .625, height: .625, x: 0, y: 0 });
+    for (const id of await page.locator('[data-equipment-lens]').evaluateAll(elements => elements.map(el => el.dataset.equipmentLens))) {
+      await activateWithKeyboard(page, `[data-equipment-lens="${id}"] summary`);
+      assert.equal(await page.locator(`[data-equipment-lens="${id}"] details`).evaluate(el => el.open), true);
+      assert.ok((await page.locator(`[data-equipment-lens="${id}"] details dd`).allTextContents()).every(text => text.length > 0));
+    }
+    for (const id of await page.locator('[data-equipment-scene]').evaluateAll(elements => elements.map(el => el.dataset.equipmentScene))) {
+      const selector = `[data-equipment-scene="${id}"]`;
+      await activateWithKeyboard(page, selector + '>summary');
+      assert.equal(await page.locator(selector).evaluate(el => el.open), true);
+      assert.ok((await page.locator(selector + ' .eg-scene-body').innerText()).length > 100);
+      await assertFocus(page, selector + '>summary', 'scenario disclosure retains focus');
+      await activateWithKeyboard(page, selector + '>summary');
+      assert.equal(await page.locator(selector).evaluate(el => el.open), false);
+    }
+    await activateWithKeyboard(page, '.eg-sources>summary');
+    assert.ok(await page.locator('.eg-sources a[href^="https://"]').count());
+    await activateWithKeyboard(page, '.eg-course a[href="#lesson/two-lens-comparison"]');
+    await page.locator('#complete-lesson').waitFor();
+    await page.goBack();
+    await page.locator('.eg-root').waitFor();
+    await page.reload();
+    await page.locator('.eg-root').waitFor();
+    for (const taskId of equipmentTaskIds) {
+      await route(page, 'kit');
+      await page.locator(`.eg-course a[href="#practice/${taskId}"]`).click();
+      await page.locator(`#task-${taskId} details[open]`).waitFor();
+    }
+    await route(page, 'kit/not-a-topic');
+    await checkPage(page, 'unknown equipment subroute');
+    assert.equal(await page.locator('.eg-root').count(), 1, 'unknown kit subroute retains the complete hub');
+    await route(page, 'camera');
+    await activateWithKeyboard(page, '.camera-kit-entry a[href="#kit"]');
+    await page.locator('.eg-root').waitFor();
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), key), savedBefore, 'equipment and course/task entrances leave the exact existing records untouched');
+  } finally { await isolated.close(); }
 }
 async function checkKeyboard(base, errors) {
   const isolated = await browser.newContext();
@@ -654,28 +719,29 @@ async function main() {
   await page.goto(base);
   await checkPage(page, 'desktop home');
   const counts = await page.evaluate(() => ({ lessons: PHOTO_DATA.lessons.length, tasks: PHOTO_DATA.tasks.length, cards: PHOTO_DATA.cards.length, questions: PhotoPractice.questions.length }));
-  assert.equal(counts.lessons, 36); assert.equal(counts.tasks, 32); assert.equal(counts.cards, 72); assert.ok(counts.questions >= 12);
+  assert.equal(counts.lessons, 40); assert.equal(counts.tasks, 36); assert.equal(counts.cards, 80); assert.ok(counts.questions >= 12);
   await page.locator('[data-stage="5"]').click();
   assert.equal(await page.locator('.course-card').count(), 4);
   await prepareScreenshot(page);
   await page.screenshot({ path: path.join(output, 'new-courses-desktop.png'), fullPage: true });
-  for (const stage of ['6', '7', '8', '9']) {
+  for (const stage of ['6', '7', '8', '9', '10']) {
     await page.locator(`[data-stage="${stage}"]`).click();
-    assert.equal(await page.locator('.course-card').count(), Number(stage) >= 8 ? 3 : 4, 'stage ' + stage + ' exposes its courses');
+    assert.equal(await page.locator('.course-card').count(), ['8', '9'].includes(stage) ? 3 : 4, 'stage ' + stage + ' exposes its courses');
     assert.equal(await page.locator(`[data-stage="${stage}"]`).getAttribute('aria-pressed'), 'true');
   }
   await route(page, 'lesson/local-editing');
   await prepareScreenshot(page);
   await page.screenshot({ path: path.join(output, 'systematic-lesson-desktop.png'), fullPage: true });
-  const routes = await page.evaluate(() => [
+  const routes = await page.evaluate(equipmentTaskIds => [
     ...PHOTO_DATA.lessons.map(x => 'lesson/' + x.id),
     ...PHOTO_ADVANCED.cases.map(x => 'cases/' + x.id),
     ...PhotoFieldGuide.items.map(x => 'diagnose/' + x.id),
     ...PhotoHistogram.scenarios.map(x => 'histogram/' + x.id),
     ...PhotoPaths.items.map(x => 'paths/' + x.id),
     ...PHOTO_CAMERA_CONFIG.topics.map(x => 'camera/' + x.id),
-    'diagnose', 'camera', 'cases', 'lab', 'histogram', 'paths', 'practice', 'review', 'observe', 'edit', 'reference', 'settings'
-  ]);
+    ...equipmentTaskIds.map(id => 'practice/' + id),
+    'diagnose', 'camera', 'kit', 'kit/not-a-topic', 'cases', 'lab', 'histogram', 'paths', 'practice', 'review', 'observe', 'edit', 'reference', 'settings'
+  ], equipmentTaskIds);
   for (const hash of routes) { await route(page, hash); await checkPage(page, hash); }
   await route(page, 'paths/first-session');
   await page.screenshot({ path: path.join(output, 'learning-path-desktop.png'), fullPage: true });
@@ -684,6 +750,11 @@ async function main() {
   await page.locator('.parameter-table-section').screenshot({ path: path.join(output, 'camera-parameters-desktop.png') });
   await route(page, 'camera/auto-iso');
   await page.screenshot({ path: path.join(output, 'camera-config-desktop.png'), fullPage: true });
+  await route(page, 'kit');
+  await page.screenshot({ path: path.join(output, 'equipment-desktop.png'), fullPage: true });
+  await route(page, 'lesson/two-lens-comparison');
+  await prepareScreenshot(page);
+  await page.screenshot({ path: path.join(output, 'two-lens-course-desktop.png'), fullPage: true });
   await checkDiagnosis(page);
   await checkSpecialtyQuestion(page);
   const histogramIds = await checkHistograms(page);
@@ -713,6 +784,13 @@ async function main() {
   assert.ok(await page.locator('.search-result[href="#camera/auto-iso"]').count(), 'configuration topics are searchable');
   await page.locator('.search-result[href="#camera/auto-iso"]').click();
   await page.locator('[data-camera-topic="auto-iso"]').waitFor();
+  for (const term of ['小痰盂', '18-150', 'RF50']) {
+    await page.locator('#search-button').click();
+    await page.locator('#search-input').fill(term);
+    assert.ok(await page.locator('.search-result[href="#kit"]').count(), 'confirmed equipment is searchable by ' + term);
+    await page.locator('.search-result[href="#kit"]').click();
+    await page.locator('.eg-root').waitFor();
+  }
   await route(page, 'practice/metering-bracket');
   await page.locator('[data-note="metering-bracket"]').fill('已有实拍笔记');
   await page.locator('[data-note-template="metering-bracket"]').click();
@@ -725,6 +803,27 @@ async function main() {
   for (const hash of ['home', 'diagnose', 'lesson/metering-histogram', 'observe', 'practice/export-verify', 'settings', 'reference', ...newLessonIds.map(id => 'lesson/' + id), 'histogram', ...histogramIds.map(id => 'histogram/' + id), 'paths', ...(await page.evaluate(() => PhotoPaths.items.map(item => 'paths/' + item.id)))]) {
     await route(page, hash); await checkPage(page, 'mobile ' + hash);
   }
+  for (const hash of ['kit', 'kit/not-a-topic', ...equipmentLessonIds.map(id => 'lesson/' + id), ...equipmentTaskIds.map(id => 'practice/' + id)]) {
+    await route(page, hash); await checkPage(page, 'mobile ' + hash);
+  }
+  await route(page, 'kit');
+  for (const selector of ['.eg-lens details>summary', '.eg-scene>summary', '.eg-sources>summary']) {
+    for (let index = 0; index < await page.locator(selector).count(); index++) await page.locator(selector).nth(index).click();
+    await checkPage(page, 'mobile expanded kit ' + selector);
+  }
+  const angles = page.locator('.eg-angle-scroll');
+  assert.equal(await angles.evaluate(el => getComputedStyle(el).overflowX), 'auto');
+  assert.ok(await angles.evaluate(el => el.scrollWidth > el.clientWidth && el.getBoundingClientRect().right <= innerWidth));
+  await angles.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => document.querySelector('.eg-angle-scroll').scrollLeft > 0);
+  const diagramTextSizes = await page.locator('.eg-record-area svg').evaluate(svg => [...svg.querySelectorAll('text')].map(text => parseFloat(getComputedStyle(text).fontSize) * svg.getBoundingClientRect().width / svg.viewBox.baseVal.width));
+  assert.ok(diagramTextSizes.every(size => size >= 14), 'mobile record-area labels remain at least 14 CSS pixels after SVG scaling');
+  assert.ok(await page.locator('.eg-area-ratio').evaluate(el => parseFloat(getComputedStyle(el).fontSize) >= 15), 'crop ratio uses readable HTML text');
+  await page.locator('.eg-record-area').screenshot({ path: path.join(output, 'equipment-record-area-mobile.png') });
+  await route(page, 'home');
+  await route(page, 'kit');
+  await page.screenshot({ path: path.join(output, 'equipment-mobile.png'), fullPage: true });
   await checkParameterTables(page, true);
   await route(page, 'lesson/exposure');
   await page.locator('.parameter-table-section').screenshot({ path: path.join(output, 'camera-parameters-mobile.png') });
@@ -759,6 +858,13 @@ async function main() {
   await offline.reload();
   await offline.locator('[data-camera-topic="auto-iso"]').waitFor();
   await checkParameterTables(offline);
+  for (const hash of ['kit', 'kit/not-a-topic', ...equipmentLessonIds.map(id => 'lesson/' + id), ...equipmentTaskIds.map(id => 'practice/' + id)]) {
+    await route(offline, hash); await checkPage(offline, 'file ' + hash);
+  }
+  await route(offline, 'kit');
+  await offline.reload();
+  await offline.locator('.eg-root').waitFor();
+  await checkEquipment(base, errors);
   await checkCameraManual(base, errors);
   await checkLearningPaths(base, errors);
   await checkKeyboard(base, errors);
@@ -768,7 +874,7 @@ async function main() {
   await checkMultipleTabs(base, errors);
   await checkDeferredImport(base, errors);
   assert.deepEqual(errors, [], 'no uncaught browser errors');
-  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, learningPaths: 6, pathContextAndRestore: true, cameraTopics: 12, parameterTables: 8, cameraHistoryAndRecords: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, learningPaths: 6, pathContextAndRestore: true, cameraTopics: 12, parameterTables: 8, cameraHistoryAndRecords: true, equipmentHub: true, equipmentScenarios: 6, equipmentLessons: 4, equipmentRecordsPreserved: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
 }
 main().catch(async error => {
   console.error(error);

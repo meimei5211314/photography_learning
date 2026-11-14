@@ -7,7 +7,7 @@ const vm=require('node:vm');
 const L=require('../learning.js');
 const original=require('./fixtures/v2-content-contract.json');
 const context={window:{}};
-for(const file of ['data.js','advanced-data.js','field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','glossary.js','media.js','media-v3.js','field-guide.js','histogram.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
+for(const file of ['data.js','advanced-data.js','field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','lens-practice-data.js','equipment-data.js','glossary.js','media.js','media-v3.js','field-guide.js','histogram.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
 const D=context.window.PHOTO_DATA,A=context.window.PHOTO_ADVANCED,M=context.window.PHOTO_MEDIA;
 const plain=x=>JSON.parse(JSON.stringify(x));
 
@@ -59,7 +59,7 @@ test('specialty course entry links resolve to implemented routes and real conten
     if(page==='histogram')return !id||context.window.PhotoHistogram.scenarios.some(t=>t.id===id);
     if(page==='lab')return ['exposure','compare','composition','focal','whitebalance'].includes(id);
     if(page==='camera')return !id||context.window.PHOTO_CAMERA_CONFIG.topics.some(topic=>topic.id===id);
-    return ['edit','review','observe','home','reference'].includes(page)&&!id;
+    return ['edit','review','observe','home','reference','kit'].includes(page)&&!id;
   };
   for(const l of D.lessons.filter(l=>l.stage>=4)){
     assert.ok(l.sections.length>=5,l.id+' depth');
