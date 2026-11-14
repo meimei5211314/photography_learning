@@ -7,7 +7,7 @@ const vm=require('node:vm');
 const L=require('../learning.js');
 const original=require('./fixtures/v2-content-contract.json');
 const context={window:{}};
-for(const file of ['data.js','advanced-data.js','field-data.js','knowledge-data.js','photography-extension.js','glossary.js','media.js','media-v3.js','field-guide.js','histogram.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
+for(const file of ['data.js','advanced-data.js','field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','glossary.js','media.js','media-v3.js','field-guide.js','histogram.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
 const D=context.window.PHOTO_DATA,A=context.window.PHOTO_ADVANCED,M=context.window.PHOTO_MEDIA;
 const plain=x=>JSON.parse(JSON.stringify(x));
 

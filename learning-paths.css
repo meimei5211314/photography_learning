@@ -1,0 +1,46 @@
+.lp-root { color:#294c3e; line-height:1.85; overflow-wrap:anywhere; }
+.lp-heading { max-width:900px; margin:12px 0 28px; }
+.lp-heading h1 { font-size:clamp(25px,3vw,36px); line-height:1.5; margin:10px 0; }
+.lp-heading p,.lp-root p { font-size:15px; color:#52684e; }
+.lp-intro,.lp-limit,.lp-notice { padding:22px 25px; border-left:3px solid #8ba76c; border-radius:0 10px 10px 0; background:#eef3e7; margin-bottom:26px; }
+.lp-intro h2,.lp-limit h2 { font-size:20px; margin:0 0 12px; }
+.lp-root .lp-note { font-size:13px; margin:16px 0 0; }
+.lp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.lp-card { padding:24px; background:#fff; border:1px solid #dce3d5; border-radius:12px; transition:background .15s,border-color .15s; }
+.lp-card:hover,.lp-task:hover { border-color:#89a56a; background:#f9fbf6; }
+.lp-number { color:#647e52; letter-spacing:1px; font-size:12px; }
+.lp-card h2 { font-size:21px; margin:16px 0 9px; line-height:1.5; }
+.lp-card p { margin:0 0 20px; }
+.lp-progress { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:20px 0; }
+.lp-progress div { padding:12px 9px; background:#f1f5eb; border-radius:7px; }
+.lp-progress dt { font-size:12px; color:#52684e; }
+.lp-progress dd { font-size:22px; margin:3px 0 0; font-variant-numeric:tabular-nums; }
+.lp-action { font-size:14px; color:#3b6245; }
+.lp-section { background:#fff; border:1px solid #dce3d5; border-radius:12px; padding:25px; margin:24px 0; }
+.lp-section h2 { font-size:21px; margin:0 0 16px; }
+.lp-section h3 { font-size:17px; margin:20px 0 12px; }
+.lp-section ul,.lp-section ol { padding-left:24px; }
+.lp-section li { margin:12px 0; font-size:15px; }
+.lp-root a:focus-visible { outline:3px solid #7e9e5b; outline-offset:4px; }
+.lp-prerequisites a,.lp-lessons a,.lp-bottom a { text-decoration:underline; text-underline-offset:4px; }
+.lp-prerequisites span { display:inline-block; margin-left:10px; font-size:13px; color:#637958; }
+.lp-lessons li { padding:14px 0; border-bottom:1px solid #e2e8db; }
+.lp-lessons li:last-child { border-bottom:0; }
+.lp-lesson-status { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 0; }
+.lp-lesson-status span { font-size:12px; background:#f1f5eb; border-radius:5px; padding:3px 9px; }
+.lp-task-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:15px; }
+.lp-task { display:block; border:1px solid #dce3d5; padding:18px; border-radius:9px; }
+.lp-task h3 { margin:0 0 10px; }
+.lp-task span { font-size:13px; color:#4c7045; }
+.lp-bottom { display:flex; gap:25px; flex-wrap:wrap; margin:25px 0; }
+@media(max-width:1100px) { .lp-task-grid { grid-template-columns:1fr; } }
+@media(max-width:650px) {
+  .lp-grid { grid-template-columns:1fr; gap:16px; }
+  .lp-card,.lp-section,.lp-intro,.lp-limit { padding:20px 17px; }
+  .lp-card h2,.lp-section h2 { font-size:20px; }
+  .lp-progress { gap:6px; }
+  .lp-progress dt { font-size:11px; }
+  .lp-progress dd { font-size:20px; }
+  .lp-progress div { padding:10px 7px; }
+}
+@media(prefers-reduced-motion:reduce) { .lp-root * { transition:none!important; } }

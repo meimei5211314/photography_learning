@@ -214,3 +214,12 @@
 .lesson-sources a { text-decoration:underline; text-underline-offset:3px; overflow-wrap:anywhere; }
 .lesson-sources li { margin:10px 0; line-height:1.7; }
 .reference-card:focus { outline:3px solid #7e9e5b; outline-offset:4px; }
+.goal-path-entry { display:flex; align-items:center; gap:24px; justify-content:space-between; padding:24px; margin:24px 0; background:#eef3e7; border:1px solid var(--line); border-radius:14px; }
+.goal-path-entry h2 { margin:0 0 10px; font-size:22px; }
+.goal-path-entry p { margin:0; line-height:1.8; max-width:680px; }
+.goal-path-entry a { flex-shrink:0; }
+.lesson-goals { padding:20px; margin:24px 0; background:#f4f7ef; border-left:3px solid #789461; }
+.lesson-goals li { margin:10px 0; line-height:1.8; }
+.lesson-goals a { text-decoration:underline; text-underline-offset:3px; }
+@media(max-width:650px) { .goal-path-entry { align-items:flex-start; flex-direction:column; padding:20px; } .lesson-goals { padding:16px; } }
+.task-actions { flex-wrap:wrap; }

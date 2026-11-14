@@ -201,6 +201,75 @@ async function checkDeferredImport(base, errors) {
     assert.equal(await beforeUnloadBlocked(page), false, 'successful import clears unsaved warning');
   } finally { await isolated.close(); }
 }
+async function checkLearningPaths(base, errors) {
+  const isolated = await browser.newContext();
+  const page = await isolated.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('dialog', dialog => dialog.accept());
+  const counters = async () => (await page.locator('.lp-progress dd').allTextContents()).map(text => text.replace(/\s/g, ''));
+  try {
+    await page.goto(base + '/#paths');
+    assert.equal(await page.locator('.lp-card').count(), 6);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), key), null, 'opening a route does not write progress');
+    await activateWithKeyboard(page, '.lp-card[href="#paths/first-session"]');
+    await page.waitForFunction(() => location.hash === '#paths/first-session');
+    const first = await page.evaluate(() => PhotoPaths.items.find(item => item.id === 'first-session'));
+    assert.deepEqual(await counters(), ['0/' + first.lessonIds.length, '0/' + first.lessonIds.length, '0/' + first.taskIds.length]);
+    await page.locator('.lp-lessons a[href="#lesson/camera?path=first-session"]').click();
+    await page.locator('.path-return[href="#paths/first-session"]').waitFor();
+    await page.reload();
+    assert.equal(await page.locator('.path-return[href="#paths/first-session"]').count(), 1, 'refresh retains the path query');
+    const correct = await page.evaluate(() => PHOTO_DATA.lessons.find(item => item.id === 'camera').quiz.answer);
+    await page.locator(`[data-answer="${correct}"]`).click();
+    await page.locator('#complete-lesson').click();
+    await page.waitForFunction(() => location.hash === '#paths/first-session');
+    assert.deepEqual(await counters(), ['1/' + first.lessonIds.length, '1/' + first.lessonIds.length, '0/' + first.taskIds.length], 'course completion returns to the selected goal and refreshes separate counters');
+    const taskId = first.taskIds[0];
+    await page.locator(`.lp-task[href="#practice/${taskId}?path=first-session"]`).click();
+    await page.locator(`#task-${taskId} details[open]`).waitFor();
+    const checks = page.locator(`[data-task="${taskId}"][data-check]`);
+    for (let index = 0; index < await checks.count(); index++) await checks.nth(index).check();
+    await page.locator(`[data-note="${taskId}"]`).fill('路径验证：保留原片、条件与下一次行动');
+    await page.locator(`[data-finish-task="${taskId}"]`).click();
+    await page.locator(`#task-${taskId} .task-path-return[href="#paths/first-session"]`).click();
+    await page.waitForFunction(() => location.hash === '#paths/first-session');
+    assert.deepEqual(await counters(), ['1/' + first.lessonIds.length, '1/' + first.lessonIds.length, '1/' + first.taskIds.length]);
+    await route(page, 'settings');
+    const partial = await exportRecord(page);
+    assert.equal(partial.tasks[taskId].note, '路径验证：保留原片、条件与下一次行动');
+    const full = await page.evaluate(() => ({ version: 2, completed: PHOTO_DATA.lessons.map(item => item.id), quiz: Object.fromEntries(PHOTO_DATA.lessons.map(item => [item.id, true])), tasks: Object.fromEntries(PHOTO_DATA.tasks.map(item => [item.id, { completed: true, checks: item.criteria.map((_, index) => index), note: '自报完成：保留证据' }])), reviews: {}, diagnostics: {} }));
+    await page.locator('#import-data').setInputFiles({ name: 'path-complete.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(full)) });
+    await page.waitForFunction(key => JSON.parse(localStorage.getItem(key) || '{}').completed?.length === PHOTO_DATA.lessons.length, key);
+    for (const item of await page.evaluate(() => PhotoPaths.items)) {
+      await route(page, 'paths/' + item.id);
+      assert.deepEqual(await counters(), [item.lessonIds.length + '/' + item.lessonIds.length, item.lessonIds.length + '/' + item.lessonIds.length, item.taskIds.length + '/' + item.taskIds.length]);
+      assert.match(await page.locator('.lp-note').innerText(), /不自动评价照片或认定掌握/);
+    }
+    await page.reload();
+    assert.equal(await page.locator('.lp-detail').count(), 1, 'path deep link survives reload after import');
+    await route(page, 'settings');
+    await page.locator('#import-data').setInputFiles({ name: 'path-partial.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(partial)) });
+    await page.waitForFunction(key => JSON.parse(localStorage.getItem(key) || '{}').completed?.length === 1, key);
+    await route(page, 'paths/first-session');
+    assert.deepEqual(await counters(), ['1/' + first.lessonIds.length, '1/' + first.lessonIds.length, '1/' + first.taskIds.length], 'restored backup changes the displayed route state');
+    await route(page, 'paths/people-action');
+    await page.locator('.lp-prerequisites a[href="#lesson/exposure?path=people-action"]').click();
+    await page.locator('.path-return[href="#paths/people-action"]').waitFor();
+    await page.locator('#complete-lesson').click();
+    await page.waitForFunction(() => location.hash === '#paths/people-action');
+    const people = await page.evaluate(() => PhotoPaths.items.find(item => item.id === 'people-action'));
+    assert.deepEqual(await counters(), ['0/' + people.lessonIds.length, '0/' + people.lessonIds.length, '0/' + people.taskIds.length], 'prerequisite returns to the goal without counting as a core lesson');
+    await route(page, 'paths/not-a-goal');
+    assert.equal(await page.locator('.lp-card').count(), 6);
+    assert.match(await page.locator('.lp-notice').textContent(), /没有找到/);
+    await route(page, 'lesson/camera?path=not-a-goal');
+    assert.equal(await page.locator('.path-return').count(), 0, 'unknown path does not capture ordinary navigation');
+    await page.locator('#complete-lesson').click();
+    await page.waitForFunction(() => location.hash === '#lesson/exposure');
+    await route(page, 'lesson/camera?path=editing-delivery');
+    assert.equal(await page.locator('.path-return').count(), 0, 'an unrelated valid path cannot capture a lesson');
+  } finally { await isolated.close(); }
+}
 async function checkPhotoFailures(base, errors) {
   const isolated = await browser.newContext();
   const page = await isolated.newPage();
@@ -494,27 +563,30 @@ async function main() {
   await page.goto(base);
   await checkPage(page, 'desktop home');
   const counts = await page.evaluate(() => ({ lessons: PHOTO_DATA.lessons.length, tasks: PHOTO_DATA.tasks.length, cards: PHOTO_DATA.cards.length, questions: PhotoPractice.questions.length }));
-  assert.equal(counts.lessons, 30); assert.equal(counts.tasks, 26); assert.equal(counts.cards, 60); assert.ok(counts.questions >= 12);
+  assert.equal(counts.lessons, 36); assert.equal(counts.tasks, 32); assert.equal(counts.cards, 72); assert.ok(counts.questions >= 12);
   await page.locator('[data-stage="5"]').click();
   assert.equal(await page.locator('.course-card').count(), 4);
   await prepareScreenshot(page);
   await page.screenshot({ path: path.join(output, 'new-courses-desktop.png'), fullPage: true });
-  for (const stage of ['6', '7']) {
+  for (const stage of ['6', '7', '8', '9']) {
     await page.locator(`[data-stage="${stage}"]`).click();
-    assert.equal(await page.locator('.course-card').count(), 4, 'new stage ' + stage + ' exposes its four courses');
+    assert.equal(await page.locator('.course-card').count(), Number(stage) >= 8 ? 3 : 4, 'stage ' + stage + ' exposes its courses');
     assert.equal(await page.locator(`[data-stage="${stage}"]`).getAttribute('aria-pressed'), 'true');
   }
-  await route(page, 'lesson/closeup');
+  await route(page, 'lesson/local-editing');
   await prepareScreenshot(page);
-  await page.screenshot({ path: path.join(output, 'new-lesson-desktop.png'), fullPage: true });
+  await page.screenshot({ path: path.join(output, 'systematic-lesson-desktop.png'), fullPage: true });
   const routes = await page.evaluate(() => [
     ...PHOTO_DATA.lessons.map(x => 'lesson/' + x.id),
     ...PHOTO_ADVANCED.cases.map(x => 'cases/' + x.id),
     ...PhotoFieldGuide.items.map(x => 'diagnose/' + x.id),
     ...PhotoHistogram.scenarios.map(x => 'histogram/' + x.id),
-    'diagnose', 'camera', 'cases', 'lab', 'histogram', 'practice', 'review', 'observe', 'edit', 'reference', 'settings'
+    ...PhotoPaths.items.map(x => 'paths/' + x.id),
+    'diagnose', 'camera', 'cases', 'lab', 'histogram', 'paths', 'practice', 'review', 'observe', 'edit', 'reference', 'settings'
   ]);
   for (const hash of routes) { await route(page, hash); await checkPage(page, hash); }
+  await route(page, 'paths/first-session');
+  await page.screenshot({ path: path.join(output, 'learning-path-desktop.png'), fullPage: true });
   await checkDiagnosis(page);
   await checkSpecialtyQuestion(page);
   const histogramIds = await checkHistograms(page);
@@ -534,6 +606,11 @@ async function main() {
     await page.waitForFunction(id => document.activeElement?.id === 'term-' + id, id);
     assert.equal(await page.locator(`#term-${id} a[href^="#lesson/"]`).count(), 1, 'glossary search connects definition to its lesson');
   }
+  await page.locator('#search-button').click();
+  await page.locator('#search-input').fill('旅行');
+  assert.ok(await page.locator('.search-result[href="#paths/landscape-night"]').count(), 'goal paths are searchable');
+  await page.locator('.search-result[href="#paths/landscape-night"]').click();
+  await page.locator('.lp-detail').waitFor();
   await route(page, 'practice/metering-bracket');
   await page.locator('[data-note="metering-bracket"]').fill('已有实拍笔记');
   await page.locator('[data-note-template="metering-bracket"]').click();
@@ -542,8 +619,8 @@ async function main() {
   await page.reload();
   assert.equal(await page.locator('[data-note="metering-bracket"]').inputValue(), note);
   await page.setViewportSize({ width: 390, height: 844 });
-  const newLessonIds = ['sensor-raw', 'af-tracking', 'shutter-stabilization', 'lens-system', 'flash-basics', 'closeup', 'night-scene', 'photo-series'];
-  for (const hash of ['home', 'diagnose', 'lesson/metering-histogram', 'observe', 'practice/export-verify', 'settings', 'reference', ...newLessonIds.map(id => 'lesson/' + id), 'histogram', ...histogramIds.map(id => 'histogram/' + id)]) {
+  const newLessonIds = ['sensor-raw', 'af-tracking', 'shutter-stabilization', 'lens-system', 'flash-basics', 'closeup', 'night-scene', 'photo-series', 'camera-readiness', 'filters-exposure', 'action-panning', 'still-life-lighting', 'local-editing', 'color-output'];
+  for (const hash of ['home', 'diagnose', 'lesson/metering-histogram', 'observe', 'practice/export-verify', 'settings', 'reference', ...newLessonIds.map(id => 'lesson/' + id), 'histogram', ...histogramIds.map(id => 'histogram/' + id), 'paths', ...(await page.evaluate(() => PhotoPaths.items.map(item => 'paths/' + item.id)))]) {
     await route(page, hash); await checkPage(page, 'mobile ' + hash);
   }
   await checkDiagnosis(page);
@@ -552,6 +629,8 @@ async function main() {
   await page.screenshot({ path: path.join(output, 'diagnosis-mobile.png'), fullPage: true });
   await route(page, 'histogram/highlight-clipping');
   await page.screenshot({ path: path.join(output, 'histogram-mobile.png'), fullPage: true });
+  await route(page, 'paths/editing-delivery');
+  await page.screenshot({ path: path.join(output, 'learning-path-mobile.png'), fullPage: true });
   const offline = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   offline.on('pageerror', error => errors.push(error.message));
   await offline.context().setOffline(true);
@@ -559,6 +638,8 @@ async function main() {
   await checkPage(offline, 'file protocol');
   assert.match(await offline.locator('main h1').textContent(), /导出|交付|备份/);
   await checkHistograms(offline);
+  for (const hash of ['paths', ...(await offline.evaluate(() => PhotoPaths.items.map(item => 'paths/' + item.id)))]) { await route(offline, hash); await checkPage(offline, 'file ' + hash); }
+  await checkLearningPaths(base, errors);
   await checkKeyboard(base, errors);
   await checkPhotoFailures(base, errors);
   await checkPhotoPairs(base, errors);
@@ -566,7 +647,7 @@ async function main() {
   await checkMultipleTabs(base, errors);
   await checkDeferredImport(base, errors);
   assert.deepEqual(errors, [], 'no uncaught browser errors');
-  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, learningPaths: 6, pathContextAndRestore: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
 }
 main().catch(async error => {
   console.error(error);
