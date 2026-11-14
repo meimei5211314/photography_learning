@@ -8,10 +8,11 @@ const { buildIndex, search } = require('../search.js');
 const original = require('./fixtures/v3-content-contract.json');
 const fieldBaseline = require('./fixtures/field-content-contract.json');
 const curriculumBaseline = require('./fixtures/curriculum-30-contract.json');
+const cameraBaseline = require('./fixtures/curriculum-36-contract.json');
 const learning = require('../learning.js');
 const root = path.resolve(__dirname, '..');
 const context = { window: {} };
-for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
+for (const file of ['data.js', 'advanced-data.js', 'field-data.js','knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','glossary.js', 'media.js', 'media-v3.js', 'field-guide.js','histogram.js','learning-paths.js']) {
   vm.runInNewContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
 }
 const D = context.window.PHOTO_DATA;
@@ -19,8 +20,10 @@ const cases = context.window.PHOTO_ADVANCED.cases;
 const diagnoses = context.window.PhotoFieldGuide.items;
 const histograms = context.window.PhotoHistogram.scenarios;
 const paths = context.window.PhotoPaths.items;
+const cameraTopics = context.window.PHOTO_CAMERA_CONFIG.topics;
 const plain = value => JSON.parse(JSON.stringify(value));
 const supported = {
+  camera: new Set(cameraTopics.map(item=>item.id)),
   paths: new Set(paths.map(item=>item.id)),
   lesson: new Set(D.lessons.map(x => x.id)), practice: new Set(D.tasks.map(x => x.id)),
   cases: new Set(cases.map(x => x.id)), diagnose: new Set(diagnoses.map(x => x.id)),
@@ -55,8 +58,8 @@ test('all 22 previous lessons and 18 task records survive the new curriculum wit
 });
 test('new learning paths and all search results point to supported pages and actual records', () => {
   for (const lesson of D.lessons) for (const related of lesson.related || []) assertLink(related.href);
-  const index = buildIndex(D, cases, diagnoses, histograms, paths);
-  assert.equal(index.length, D.lessons.length + D.tasks.length + cases.length + diagnoses.length + histograms.length + D.glossary.length + paths.length);
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics);
+  assert.equal(index.length, D.lessons.length + D.tasks.length + cases.length + diagnoses.length + histograms.length + D.glossary.length + paths.length + cameraTopics.length);
   for (const item of index) assertLink(item.href);
   for (const keyword of ['直方图', '清晰', '导出', '长曝光', 'RAW', '闪光', '近摄', '夜景', '组照', '滚动快门', '滤镜', '追随', '蒙版', '软打样']) {
     assert.ok(search(index, keyword).length > 0, keyword + ' must be discoverable');
@@ -100,5 +103,36 @@ test('foundation goals and prerequisites lead to actual practice without circula
     assertLink('#paths/'+item.id);
     for(const id of item.lessonIds)assertLink('#lesson/'+id);
     for(const id of item.taskIds)assertLink('#practice/'+id);
+  }
+});
+
+test('camera detail preserves all 36 lesson identities, quiz meanings and 32 saved task checklists', () => {
+  assert.deepEqual(plain(D.lessons.map(item=>item.id)), cameraBaseline.lessons);
+  assert.deepEqual(plain(D.cards.map(item=>item.id)), cameraBaseline.cards);
+  const before = learning.freshState();
+  before.completed = [...cameraBaseline.lessons];
+  for (const lesson of D.lessons) {
+    assert.deepEqual(plain(lesson.quiz), cameraBaseline.quiz[lesson.id], lesson.id+' saved answer meaning');
+    before.quiz[lesson.id] = true;
+  }
+  for (const task of cameraBaseline.tasks) {
+    assert.deepEqual(plain(D.tasks.find(item=>item.id===task.id).criteria), task.criteria, task.id);
+    before.tasks[task.id] = {completed:true, checks:task.criteria.map((_,i)=>i), note:'相机设置调整前的实拍记录'};
+  }
+  for (const id of cameraBaseline.cards) before.reviews[id] = {step:2,due:1794790800000,lastReviewed:1794531600000};
+  assert.deepEqual(learning.validateState(before,D.lessons.map(x=>x.id),D.tasks.map(x=>x.id),D.cards.map(x=>x.id)),before);
+});
+
+test('all camera configurations link to real lessons and tasks and can be found through setting names', () => {
+  const index = buildIndex(D, cases, diagnoses, histograms, paths, cameraTopics);
+  assert.equal(cameraTopics.length,12);
+  for (const topic of cameraTopics) {
+    assertLink('#camera/'+topic.id);
+    for (const id of topic.lessonIds) assertLink('#lesson/'+id);
+    assertLink('#practice/'+topic.taskId);
+    assert.ok(index.some(item=>item.type==='相机配置'&&item.href==='#camera/'+topic.id));
+  }
+  for (const term of ['ISO','白平衡','伺服','C1','快门','回放']) {
+    assert.ok(search(index, term).some(item=>item.type==='相机配置'),term);
   }
 });

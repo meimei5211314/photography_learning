@@ -13,7 +13,7 @@
     if (value && typeof value === 'object') return Object.values(value).map(words).join(' ');
     return '';
   }
-  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = []) {
+  function buildIndex(data, cases = [], diagnoses = [], exercises = [], paths = [], cameraTopics = []) {
     const groups = [
       ['课程', 'lesson', data.lessons || [], item => item.subtitle],
       ['实拍任务', 'practice', data.tasks || [], item => item.description],
@@ -21,7 +21,8 @@
       ['现场排障', 'diagnose', diagnoses, item => item.summary],
       ['读图练习', 'histogram', exercises, item => item.summary],
       ['摄影术语', 'reference', data.glossary || [], item => item.summary],
-      ['学习路径', 'paths', paths, item => item.summary]
+      ['学习路径', 'paths', paths, item => item.summary],
+      ['相机配置', 'camera', cameraTopics, item => item.summary]
     ];
     return groups.flatMap(([type, route, items, describe]) => items.map(item => ({
       id: item.id, type, title: item.title, description: describe(item) || '',

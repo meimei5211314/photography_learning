@@ -50,4 +50,13 @@
     const lesson = data.lessons.find(item => item.id === id);
     lesson.related = [...(lesson.related || []), ...links.map(([label, target]) => ({label, href: '#lesson/' + target}))];
   }
+  const cameraTopics = {
+    camera: 'controls', exposure: 'metering-compensation', aperture: 'exposure-modes',
+    shutter: 'exposure-modes', iso: 'auto-iso', focus: 'autofocus',
+    whitebalance: 'white-balance', modes: 'exposure-modes', 'r6-start': 'controls'
+  };
+  for (const [id, topic] of Object.entries(cameraTopics)) {
+    const lesson = data.lessons.find(item => item.id === id);
+    lesson.related = [...(lesson.related || []), {label:'逐项设置：入口、检查与恢复', href:'#camera/' + topic}];
+  }
 })(typeof window !== 'undefined' ? window : globalThis);

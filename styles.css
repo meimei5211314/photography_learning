@@ -223,3 +223,15 @@
 .lesson-goals a { text-decoration:underline; text-underline-offset:3px; }
 @media(max-width:650px) { .goal-path-entry { align-items:flex-start; flex-direction:column; padding:20px; } .lesson-goals { padding:16px; } }
 .task-actions { flex-wrap:wrap; }
+.parameter-table-section { margin:28px 0; }
+.reading-main { min-width:0; }
+.reading-main section p { overflow-wrap:anywhere; }
+.parameter-table-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+.parameter-table-scroll:focus-visible { outline:3px solid #789461; outline-offset:4px; }
+.parameter-table { width:100%; border-collapse:collapse; font-size:14px; line-height:1.8; }
+.parameter-table caption { padding:16px; text-align:left; font-weight:600; background:#eef3e7; }
+.parameter-table th, .parameter-table td { padding:12px 14px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+.parameter-table thead th { background:#f4f7ef; }
+.parameter-table tbody th { min-width:105px; font-weight:600; }
+.parameter-table td { min-width:140px; }
+.parameter-table tr:last-child > * { border-bottom:0; }

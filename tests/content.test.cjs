@@ -9,7 +9,7 @@ const context = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../data.js'), 'utf8'), context, { timeout: 1000 });
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../advanced-data.js'), 'utf8'), context, { timeout: 1000 });
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../field-data.js'), 'utf8'), context, { timeout: 1000 });
-for (const file of ['knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','glossary.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, {timeout: 1000});
+for (const file of ['knowledge-data.js','photography-extension.js','shooting-depth-data.js','finishing-depth-data.js','curriculum-support.js','camera-parameters-data.js','camera-config-data.js','glossary.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, {timeout: 1000});
 const data = context.window.PHOTO_DATA;
 
 function text(value, label) {

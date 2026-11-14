@@ -99,6 +99,97 @@ async function waitForRequests(requests, label) {
   while (!requests.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(requests.length, label + ': photo request was intercepted');
 }
+async function checkCameraManual(base, errors) {
+  const isolated = await browser.newContext();
+  const page = await isolated.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(base + '/#camera');
+    const originalRecord = { version: 2, completed: ['camera'], tasks: { 'r6-first': { checks: [0], completed: false, note: '已有的相机练习记录，继续保留。' } }, reviews: {}, quiz: { camera: true, focus: false }, diagnostics: {} };
+    await page.evaluate(({ key, record }) => localStorage.setItem(key, JSON.stringify(record)), { key, record: originalRecord });
+    await page.reload();
+    const savedBefore = await page.evaluate(key => localStorage.getItem(key), key);
+    assert.equal(await page.locator('[data-camera-step]').count(), 8, 'all eight quick-start steps remain available');
+    for (let index = 0; index < 8; index++) {
+      await activateWithKeyboard(page, `[data-camera-step="${index}"]`);
+      assert.equal(await page.locator(`[data-camera-step="${index}"]`).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('[data-camera-step][aria-pressed="true"]').count(), 1);
+      assert.ok((await page.locator('#camera-step-detail').innerText()).length > 150);
+    }
+    await activateWithKeyboard(page, '#camera-next');
+    await assertFocus(page, '#camera-step-title', 'last quick-start step cycles to the focused first heading');
+    assert.equal(await page.locator('[data-camera-step="0"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('[data-camera-recipe]').count(), 3);
+    for (let index = 0; index < 3; index++) {
+      await activateWithKeyboard(page, `[data-camera-recipe="${index}"]`);
+      assert.equal(await page.locator(`[data-camera-recipe="${index}"]`).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('[data-camera-recipe][aria-pressed="true"]').count(), 1);
+      await assertFocus(page, `[data-camera-recipe="${index}"]`, 'scene recipe keeps keyboard focus');
+    }
+    await activateWithKeyboard(page, '.camera-manual-entry summary');
+    assert.equal(await page.locator('.camera-manual-entry details[open] nav a').count(), 12);
+    await activateWithKeyboard(page, '.camera-manual-entry>.primary');
+    await page.locator('[data-camera-topic="controls"]').waitFor();
+    await assertFocus(page, '#main', 'manual deep link focuses main');
+    await activateWithKeyboard(page, '.cm-directory>summary');
+    assert.equal(await page.locator('.cm-directory[open] nav a').count(), 12);
+    assert.equal(await page.locator('.cm-directory a[aria-current="page"]').getAttribute('href'), '#camera/controls');
+    await activateWithKeyboard(page, '.cm-directory a[href="#camera/autofocus"]');
+    await page.locator('[data-camera-topic="autofocus"]').waitFor();
+    await page.reload();
+    await page.locator('[data-camera-topic="autofocus"]').waitFor();
+    await page.goBack();
+    await page.locator('[data-camera-topic="controls"]').waitFor();
+    await page.goForward();
+    await page.locator('[data-camera-topic="autofocus"]').waitFor();
+    const topics = await page.evaluate(() => PHOTO_CAMERA_CONFIG.topics.map(topic => ({ id: topic.id, title: topic.title, steps: topic.steps.length, settings: topic.settings.length, checks: topic.checks.length, taskId: topic.taskId })));
+    assert.equal(topics.length, 12);
+    for (const topic of topics) {
+      await route(page, 'camera/' + topic.id);
+      await checkPage(page, 'manual ' + topic.id);
+      assert.equal(await page.locator('main h1').innerText(), topic.title);
+      assert.equal(await page.locator('.cm-settings tbody tr').count(), topic.settings);
+      assert.equal(await page.locator('.cm-steps ol>li').count(), topic.steps);
+      assert.equal(await page.locator('.cm-checks ul>li').count(), topic.checks);
+      assert.ok(await page.locator('.cm-sources a[href^="https://cam.start.canon/"]').count());
+      assert.equal(await page.locator('.cm-practice .cm-task').getAttribute('href'), '#practice/' + topic.taskId);
+      assert.equal(await page.locator('.cm-directory a[aria-current="page"]').getAttribute('href'), '#camera/' + topic.id);
+      assert.equal(await page.locator('.nav-link[href="#camera"]').getAttribute('aria-current'), 'page');
+    }
+    await page.locator('.cm-practice .cm-task').click();
+    await page.locator(`#task-${topics[topics.length - 1].taskId} details[open]`).waitFor();
+    await route(page, 'camera/not-a-topic');
+    await checkPage(page, 'unknown manual topic');
+    assert.match(await page.locator('.cm-missing').innerText(), /没有找到这个配置主题/);
+    assert.equal(await page.locator('.cm-directory[open] nav a').count(), 12);
+    await activateWithKeyboard(page, '.cm-back');
+    await page.locator('#camera-next').waitFor();
+    await activateWithKeyboard(page, '#camera-next');
+    assert.equal(await page.locator('[data-camera-step="1"]').getAttribute('aria-pressed'), 'true', 'quick start still responds once after manual unmount');
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), key), savedBefore, 'manual, quick start and related links preserve the exact existing record');
+  } finally { await isolated.close(); }
+}
+async function checkParameterTables(page, mobile = false) {
+  for (const id of ['camera', 'exposure', 'aperture', 'shutter', 'iso', 'focus', 'whitebalance', 'modes']) {
+    await route(page, 'lesson/' + id);
+    await checkPage(page, (mobile ? 'mobile ' : '') + 'parameter lesson ' + id);
+    assert.equal(await page.locator('.parameter-table').count(), 1, id + ' has a comparison table');
+    assert.ok(await page.locator('.parameter-table tbody tr').count());
+    const region = page.locator('.parameter-table-scroll');
+    assert.equal(await region.getAttribute('tabindex'), '0', 'wide table is reachable by keyboard');
+    if (mobile) {
+      const size = await region.evaluate(el => ({ width: el.clientWidth, scrollWidth: el.scrollWidth, right: el.getBoundingClientRect().right, viewport: window.innerWidth, overflow: getComputedStyle(el).overflowX }));
+      assert.equal(size.overflow, 'auto');
+      assert.ok(size.right <= size.viewport, id + ': table region stays within mobile viewport');
+      if (size.scrollWidth > size.width) {
+        await region.focus();
+        await page.keyboard.press('ArrowRight');
+        await page.waitForFunction(() => document.querySelector('.parameter-table-scroll').scrollLeft > 0);
+      }
+    }
+    assert.ok(await page.locator('.reading-main a[href^="#camera/"]').count(), id + ' connects the principle to its camera configuration');
+  }
+}
 async function checkKeyboard(base, errors) {
   const isolated = await browser.newContext();
   const page = await isolated.newPage();
@@ -582,11 +673,17 @@ async function main() {
     ...PhotoFieldGuide.items.map(x => 'diagnose/' + x.id),
     ...PhotoHistogram.scenarios.map(x => 'histogram/' + x.id),
     ...PhotoPaths.items.map(x => 'paths/' + x.id),
+    ...PHOTO_CAMERA_CONFIG.topics.map(x => 'camera/' + x.id),
     'diagnose', 'camera', 'cases', 'lab', 'histogram', 'paths', 'practice', 'review', 'observe', 'edit', 'reference', 'settings'
   ]);
   for (const hash of routes) { await route(page, hash); await checkPage(page, hash); }
   await route(page, 'paths/first-session');
   await page.screenshot({ path: path.join(output, 'learning-path-desktop.png'), fullPage: true });
+  await checkParameterTables(page);
+  await route(page, 'lesson/exposure');
+  await page.locator('.parameter-table-section').screenshot({ path: path.join(output, 'camera-parameters-desktop.png') });
+  await route(page, 'camera/auto-iso');
+  await page.screenshot({ path: path.join(output, 'camera-config-desktop.png'), fullPage: true });
   await checkDiagnosis(page);
   await checkSpecialtyQuestion(page);
   const histogramIds = await checkHistograms(page);
@@ -611,6 +708,11 @@ async function main() {
   assert.ok(await page.locator('.search-result[href="#paths/landscape-night"]').count(), 'goal paths are searchable');
   await page.locator('.search-result[href="#paths/landscape-night"]').click();
   await page.locator('.lp-detail').waitFor();
+  await page.locator('#search-button').click();
+  await page.locator('#search-input').fill('自动 ISO');
+  assert.ok(await page.locator('.search-result[href="#camera/auto-iso"]').count(), 'configuration topics are searchable');
+  await page.locator('.search-result[href="#camera/auto-iso"]').click();
+  await page.locator('[data-camera-topic="auto-iso"]').waitFor();
   await route(page, 'practice/metering-bracket');
   await page.locator('[data-note="metering-bracket"]').fill('已有实拍笔记');
   await page.locator('[data-note-template="metering-bracket"]').click();
@@ -623,6 +725,19 @@ async function main() {
   for (const hash of ['home', 'diagnose', 'lesson/metering-histogram', 'observe', 'practice/export-verify', 'settings', 'reference', ...newLessonIds.map(id => 'lesson/' + id), 'histogram', ...histogramIds.map(id => 'histogram/' + id), 'paths', ...(await page.evaluate(() => PhotoPaths.items.map(item => 'paths/' + item.id)))]) {
     await route(page, hash); await checkPage(page, 'mobile ' + hash);
   }
+  await checkParameterTables(page, true);
+  await route(page, 'lesson/exposure');
+  await page.locator('.parameter-table-section').screenshot({ path: path.join(output, 'camera-parameters-mobile.png') });
+  const cameraRoutes = await page.evaluate(() => ['camera', ...PHOTO_CAMERA_CONFIG.topics.map(topic => 'camera/' + topic.id), 'camera/not-a-topic']);
+  for (const hash of cameraRoutes) {
+    await route(page, hash);
+    await checkPage(page, 'mobile ' + hash);
+    const disclosure = page.locator(hash === 'camera' ? '.camera-manual-entry summary' : '.cm-directory>summary');
+    if (!await disclosure.locator('..').evaluate(el => el.open)) await activateWithKeyboard(page, hash === 'camera' ? '.camera-manual-entry summary' : '.cm-directory>summary');
+    await checkPage(page, 'mobile expanded topics ' + hash);
+  }
+  await route(page, 'camera/auto-iso');
+  await page.locator('.cm-settings').screenshot({ path: path.join(output, 'camera-config-settings-mobile.png') });
   await checkDiagnosis(page);
   await route(page, 'diagnose');
   await prepareScreenshot(page);
@@ -639,6 +754,12 @@ async function main() {
   assert.match(await offline.locator('main h1').textContent(), /导出|交付|备份/);
   await checkHistograms(offline);
   for (const hash of ['paths', ...(await offline.evaluate(() => PhotoPaths.items.map(item => 'paths/' + item.id)))]) { await route(offline, hash); await checkPage(offline, 'file ' + hash); }
+  for (const hash of cameraRoutes) { await route(offline, hash); await checkPage(offline, 'file ' + hash); }
+  await route(offline, 'camera/auto-iso');
+  await offline.reload();
+  await offline.locator('[data-camera-topic="auto-iso"]').waitFor();
+  await checkParameterTables(offline);
+  await checkCameraManual(base, errors);
   await checkLearningPaths(base, errors);
   await checkKeyboard(base, errors);
   await checkPhotoFailures(base, errors);
@@ -647,7 +768,7 @@ async function main() {
   await checkMultipleTabs(base, errors);
   await checkDeferredImport(base, errors);
   assert.deepEqual(errors, [], 'no uncaught browser errors');
-  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, learningPaths: 6, pathContextAndRestore: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', counts, routesChecked: routes.length, viewports: ['1440×1000', '390×844'], offline: true, histogramScenarios: histogramIds.length, keyboard: true, learningPaths: 6, pathContextAndRestore: true, cameraTopics: 12, parameterTables: 8, cameraHistoryAndRecords: true, photoFailures: ['aborted', 'undecodable', 'delayed', 'retry', 'stale callbacks', 'both comparison images'], storageFailures: true, multipleTabs: true, deferredImport: true, screenshots: output }, null, 2));
 }
 main().catch(async error => {
   console.error(error);
