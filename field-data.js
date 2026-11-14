@@ -22,7 +22,7 @@
       mistakes: ['柱状图偏左不自动等于欠曝，贴右也不能直接说明主体细节全部丢失。', '把高光警告当作 RAW 可恢复余量的精确测量，或认为所有亮点都必须保住。', '在自动参数已触顶时反复增加补偿，却不检查实际快门、光圈和 ISO。'],
       mnemonic: '先定主体，再看分布；回图定位，改后复查。',
       quiz: { question: '夜街照片的直方图大多靠左，人物面部清楚，只有远处小灯点闪烁；你的目标是保留夜晚感。下一步最合理的是？', options: ['一直加曝光，直到直方图峰值居中', '先确认闪烁位置是否重要，再按主体与夜晚氛围决定是否调整', '只要出现闪烁，就把全部阴影压到纯黑'], answer: 1, explanation: '分布偏左符合许多夜景。要把图表信号对应到具体区域，判断关键细节和表达意图，而不是机械居中。' },
-      lab: 'exposure', related: [{ label: '拍三张曝光对照', href: '#practice/metering-bracket' }, { label: '按现象排查问题', href: '#diagnose' }, { label: '回看曝光取舍实验', href: '#lab/exposure' }]
+      lab: 'exposure', related: [{ label: '先做四种直方图判断', href: '#histogram' }, { label: '拍三张曝光对照', href: '#practice/metering-bracket' }, { label: '按现象排查问题', href: '#diagnose' }, { label: '回看曝光取舍实验', href: '#lab/exposure' }]
     },
     {
       id: 'sharpness-diagnosis', title: '清晰度排障：发虚究竟发生在哪里', subtitle: '用画面证据区分失焦、景深、运动与晃动',

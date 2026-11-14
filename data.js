@@ -215,6 +215,21 @@
     { title: 'Roediger & Karpicke（2006）· 主动回忆', url: 'https://psychnet.wustl.edu/memory/wp-content/uploads/2018/04/Roediger-Karpicke-2006_PsychSci.pdf', note: '延迟测验中，提取练习支持长期保持；不是只反复重读。' },
     { title: 'Cepeda 等（2008）· 间隔学习', url: 'https://laplab.ucsd.edu/articles/Cepeda%20et%20al%202008_psychsci.pdf', note: '间隔效果与保持时长相关；不支持对所有人套用唯一最优间隔。' }
   ];
+  const nextLessons = {
+    camera: [['理解传感器与文件格式', 'sensor-raw'], ['认识镜头与卡口', 'lens-system']],
+    exposure: [['读懂测光与直方图', 'metering-histogram'], ['练习夜景曝光取舍', 'night-scene']],
+    aperture: [['把景深判断用于近摄', 'closeup']],
+    shutter: [['选择快门类型与防抖', 'shutter-stabilization']],
+    iso: [['分清 RAW 与机内处理', 'sensor-raw']],
+    focus: [['继续练习主体跟踪', 'af-tracking'], ['验证清晰度问题', 'sharpness-diagnosis']],
+    lens: [['分清卡口、画幅与视角', 'lens-system'], ['理解近摄倍率与工作距离', 'closeup']],
+    composition: [['从单张走向组照', 'photo-series']],
+    light: [['开始学习闪光与环境光', 'flash-basics']],
+    whitebalance: [['在夜景中处理混合光', 'night-scene'], ['检查 RAW 与 JPEG 的区别', 'sensor-raw']],
+    modes: [['把自动参数用于跟踪拍摄', 'af-tracking']],
+    workflow: [['练习组照选片与排序', 'photo-series'], ['验证导出与备份', 'export-backup']]
+  };
+  for (const lesson of lessons) lesson.related = (nextLessons[lesson.id] || []).map(([label, id]) => ({ label, href: '#lesson/' + id }));
   const data = { lessons, tasks, cards, sources };
   root.PHOTO_DATA = data;
   if (typeof module !== 'undefined' && module.exports) module.exports = data;

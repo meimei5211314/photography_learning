@@ -211,3 +211,6 @@
   .review-ratings small { font-size:11px; }
 }
 @media (prefers-reduced-motion:reduce){.course-card:hover .course-picture img{transform:none;}}
+.lesson-sources a { text-decoration:underline; text-underline-offset:3px; overflow-wrap:anywhere; }
+.lesson-sources li { margin:10px 0; line-height:1.7; }
+.reference-card:focus { outline:3px solid #7e9e5b; outline-offset:4px; }

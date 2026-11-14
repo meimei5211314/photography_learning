@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="guides.css">
   <link rel="stylesheet" href="editing-lab.css">
   <link rel="stylesheet" href="field-guide.css">
+  <link rel="stylesheet" href="histogram.css">
 </head>
 <body>
   <a class="skip-link" href="#main">跳到学习内容</a>
@@ -29,12 +30,15 @@
     <main id="main" tabindex="-1"></main>
     <footer class="footer"><span>光影手记 <b>·</b> 把知识带到镜头之外</span><span><a href="#settings">数据备份</a> &nbsp; / &nbsp; <a href="#reference">学习资料与来源 ↗</a></span></footer>
   </div>
-  <dialog id="search-dialog"><form method="dialog" class="dialog-top"><label for="search-input">找到你想学的知识</label><button aria-label="关闭搜索" class="icon-button">×</button></form><input id="search-input" type="search" placeholder="试试：光圈、对焦、夜景…" autocomplete="off"><div id="search-results"></div></dialog>
+  <dialog id="search-dialog" aria-labelledby="search-title"><form method="dialog" class="dialog-top"><label id="search-title" for="search-input">找到你想学的知识</label><button aria-label="关闭搜索" class="icon-button">×</button></form><input id="search-input" type="search" placeholder="试试：光圈、对焦、夜景…" autocomplete="off"><p id="search-status" class="search-count" role="status" aria-live="polite"></p><div id="search-results"></div></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <noscript><p>请启用 JavaScript 以使用互动课程和本地进度功能。</p></noscript>
   <script src="data.js"></script>
   <script src="advanced-data.js"></script>
   <script src="field-data.js"></script>
+  <script src="knowledge-data.js"></script>
+  <script src="photography-extension.js"></script>
+  <script src="glossary.js"></script>
   <script src="media.js"></script>
   <script src="media-v3.js"></script>
   <script src="learning.js"></script>
@@ -44,6 +48,7 @@
   <script src="guides.js"></script>
   <script src="editing-lab.js"></script>
   <script src="field-guide.js"></script>
+  <script src="histogram.js"></script>
   <script src="search.js"></script>
   <script src="app.js"></script>
 </body>
