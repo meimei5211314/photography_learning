@@ -7,7 +7,7 @@ const vm=require('node:vm');
 const L=require('../learning.js');
 const original=require('./fixtures/v2-content-contract.json');
 const context={window:{}};
-for(const file of ['data.js','advanced-data.js','media.js','media-v3.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
+for(const file of ['data.js','advanced-data.js','field-data.js','media.js','media-v3.js','field-guide.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
 const D=context.window.PHOTO_DATA,A=context.window.PHOTO_ADVANCED,M=context.window.PHOTO_MEDIA;
 const plain=x=>JSON.parse(JSON.stringify(x));
 
@@ -55,10 +55,11 @@ test('specialty course entry links resolve to implemented routes and real conten
     if(page==='lesson')return D.lessons.some(l=>l.id===id);
     if(page==='cases')return !id||A.cases.some(c=>c.id===id);
     if(page==='practice')return !id||D.tasks.some(t=>t.id===id);
+    if(page==='diagnose')return !id||context.window.PhotoFieldGuide.items.some(t=>t.id===id);
     if(page==='lab')return ['exposure','compare','composition','focal','whitebalance'].includes(id);
     return ['camera','edit','review','observe','home','reference'].includes(page)&&!id;
   };
-  for(const l of D.lessons.filter(l=>l.stage===4)){
+  for(const l of D.lessons.filter(l=>l.stage>=4)){
     assert.ok(l.sections.length>=5,l.id+' depth');
     assert.ok(l.observation,l.id+' observation');
     assert.ok(l.related?.length>=2,l.id+' next actions');
