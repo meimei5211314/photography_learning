@@ -9,10 +9,11 @@
   // Keep the original v1/v2 JSON format. The raw snapshot is deliberately local
   // to this page: another page's replacement is never silently merged with notes.
   function createStore({ getStorage, key, validate, freshState }) {
-    let snapshot, loaded = false, invalidRaw = null, kind = 'unavailable';
+    let snapshot, loaded = false, invalidRaw = null, kind = 'unavailable', conflicted = false;
     const status = () => ({ kind, invalidRaw, loaded });
     function failure(reason, error) {
-      kind = reason;
+      if (reason === 'conflict') conflicted = true;
+      kind = conflicted ? 'conflict' : reason;
       return { ok: false, kind, error };
     }
     function load() {
@@ -21,6 +22,7 @@
       catch (error) { return failure('unavailable', error); }
       snapshot = raw;
       loaded = true;
+      conflicted = false;
       invalidRaw = null;
       try {
         const state = raw === null ? freshState() : validate(JSON.parse(raw));
@@ -32,6 +34,7 @@
       }
     }
     function check() {
+      if (conflicted) return failure('conflict');
       if (!loaded) return failure('unavailable');
       let current;
       try { current = getStorage().getItem(key); }
@@ -46,7 +49,7 @@
         serialized = JSON.stringify(normalized);
       } catch (error) { return { ok: false, kind: 'validation', error }; }
       if (!loaded) return failure('unavailable');
-      if (kind === 'conflict') return failure('conflict');
+      if (conflicted) return failure('conflict');
       try {
         const storage = getStorage();
         if (storage.getItem(key) !== snapshot) return failure('conflict');

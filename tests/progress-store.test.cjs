@@ -129,3 +129,19 @@ test('invalid candidates and an observable write/readback race do not report suc
   assert.equal(store.save(record()).kind, 'conflict');
   assert.equal(storage.raw(), competing);
 });
+
+test('a known conflict survives read errors and failed reloads even when the old raw value returns', () => {
+  const raw = JSON.stringify(record()), storage = memory(raw), store = storeFor(storage);
+  store.load();
+  storage.external(JSON.stringify(record('exposure')));
+  assert.equal(store.check().kind, 'conflict');
+  storage.failRead = true;
+  assert.equal(store.check().kind, 'conflict');
+  assert.equal(store.load().kind, 'conflict');
+  storage.failRead = false;
+  storage.external(raw);
+  assert.equal(store.save(record('exposure')).kind, 'conflict');
+  assert.equal(storage.writes, 0);
+  assert.equal(store.load().ok, true);
+  assert.equal(store.save(record('exposure')).ok, true);
+});

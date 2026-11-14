@@ -112,7 +112,7 @@
     }
   ];
   const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  let host = null, aborter = null, onResult = null, results = {}, order = [], cursor = 0, selected = null, checked = false;
+  let host = null, aborter = null, onResult = null, results = {}, order = [], cursor = 0, selected = null, checked = false, imageState = 'missing';
 
   function mount(container, options = {}) {
     destroy();
@@ -128,12 +128,15 @@
     cursor = 0; selected = null; checked = false;
     aborter = new AbortController();
     host.addEventListener('click', handleClick, { signal: aborter.signal });
+    host.addEventListener('load', imageChanged, { signal: aborter.signal, capture: true });
+    host.addEventListener('error', imageChanged, { signal: aborter.signal, capture: true });
     render();
   }
 
   function destroy() {
     aborter?.abort();
     host = null; aborter = null; onResult = null;
+    imageState = 'missing';
   }
 
   function getAsset(question) {
@@ -144,39 +147,78 @@
     return media?.assets?.[media.lessonImages?.[question.lessonId]];
   }
 
+  function imageChanged(event) {
+    // A late event from a previous question must never unlock the current one.
+    if (!host || event.target !== host.querySelector('.vp-full-image img')) return;
+    imageState = event.type === 'load' && event.target.naturalWidth > 0 ? 'ready' : 'error';
+    if (imageState === 'error' && !checked) selected = null;
+    updateImageStatus();
+  }
+
+  function updateImageStatus() {
+    const notice = host.querySelector('.vp-image-status');
+    if (notice) {
+      notice.hidden = imageState === 'ready';
+      notice.innerHTML = imageState === 'error'
+        ? '<p>照片未能加载，暂不能作答。请确认 assets 文件夹完整，或恢复连接后重试。</p><button type="button" data-vp-action="reload-photo">重新加载照片</button>'
+        : '<p>正在载入照片，完整显示后再开始判断…</p>';
+    }
+    updateChoices();
+  }
+
+  function updateChoices() {
+    const ready = imageState === 'ready';
+    host.querySelectorAll('[data-vp-answer]').forEach(button => {
+      const active = Number(button.dataset.vpAnswer) === selected;
+      button.disabled = checked || !ready;
+      button.classList.toggle('is-selected', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    const check = host.querySelector('[data-vp-action="check"]');
+    if (check) check.disabled = selected === null || !ready;
+    const status = host.querySelector('.vp-status');
+    if (status) status.textContent = !ready ? '照片完整显示后才能选择和验证判断。' : selected === null ? '选择后再查看解释，不急着揭晓。' : '已经选择，试着再说一句“因为我看到了……”';
+  }
+
   function render() {
     const q = order[cursor], asset = getAsset(q);
+    imageState = asset ? 'loading' : 'missing';
     const correctCount = questions.filter(x => results[x.id] === true).length;
     const errors = questions.filter(x => results[x.id] === false).length;
     host.innerHTML = `<section class="vp-root" aria-label="看图判断训练">
       <div class="vp-summary"><div><strong>${correctCount}<span> / ${questions.length}</span></strong><p>最近一次答对</p></div><div><strong>${errors}</strong><p>仍需再练</p></div><p class="vp-summary-note">先观察，再选答案。答错时找出画面证据，比记住选项更重要。<br>这里只记录最近结果；答对一题并不代表已经掌握实拍。</p></div>
       <nav class="vp-question-nav" aria-label="选择训练题目">${order.map((item, index) => `<button type="button" data-vp-jump="${index}" class="vp-question ${index === cursor ? 'is-current' : ''}" ${index === cursor ? 'aria-current="step"' : ''}><span>${String(index + 1).padStart(2, '0')}</span>${escape(item.label)}<small>${results[item.id] === true ? '✓ 最近答对' : results[item.id] === false ? '↻ 还需练习' : '待观察'}</small></button>`).join('')}</nav>
       <div class="vp-workspace">
-        <div class="vp-evidence"><figure>${asset ? `<a class="vp-full-image" href="${escape(asset.src)}" target="_blank" rel="noopener" aria-label="在新标签页查看完整照片"><img src="${escape(asset.src)}" alt="${escape(asset.alt)}" loading="eager" decoding="async"></a><figcaption><strong>照片观察 · 来源见下</strong><span>${escape(asset.title)}</span><span>摄影 / ${escape(asset.author)} · <a href="${escape(asset.source)}" target="_blank" rel="noopener noreferrer">来源</a> · <a href="${escape(asset.licenseUrl)}" target="_blank" rel="noopener noreferrer">${escape(asset.license)}</a></span></figcaption>` : '<div class="vp-missing"><p>这道题的照片尚未加载。</p><p>请确认项目 assets 文件夹与 media.js 完整，再开始判断。</p></div>'}</figure><div class="vp-observe"><span>① 先看哪里</span><p>${escape(q.look)}</p></div>${asset?.note ? `<p class="vp-media-note">素材说明：${escape(asset.note)}</p>` : ''}</div>
-        <section class="vp-decision" aria-labelledby="vp-question-title"><div class="vp-kicker">② 先做判断 / ${cursor + 1} · ${questions.length}</div><h2 id="vp-question-title" tabindex="-1">${escape(q.question)}</h2><p class="vp-predict">先在心里说出理由，再选择。照片能证明什么，也要与照片不能证明的事情分开。</p><div class="vp-options" role="group" aria-label="选择你的判断">${q.options.map((text, i) => `<button type="button" class="vp-option ${selected === i ? 'is-selected' : ''} ${checked && i === q.answer ? 'is-correct' : ''} ${checked && selected === i && i !== q.answer ? 'is-wrong' : ''}" data-vp-answer="${i}" aria-pressed="${selected === i}" ${checked || !asset ? 'disabled' : ''}><span>${String.fromCharCode(65 + i)}</span>${escape(text)}${checked && i === q.answer ? '<b>正确判断</b>' : ''}</button>`).join('')}</div>${!checked ? `<button type="button" class="vp-check" data-vp-action="check" ${selected === null || !asset ? 'disabled' : ''}>验证我的判断 →</button><p class="vp-status">${selected === null ? '选择后再查看解释，不急着揭晓。' : '已经选择，试着再说一句“因为我看到了……”'}</p>` : `<div class="vp-feedback ${selected === q.answer ? 'is-good' : 'needs-work'}" role="status"><strong>${selected === q.answer ? '✓ 判断正确，接着核对证据。' : '↻ 再观察一下，问题出在判断依据。'}</strong><h3>③ 回到照片找证据</h3><p>${escape(q.evidence)}</p><h3>下次拍摄怎么用</h3><p>${escape(q.transfer)}</p><div class="vp-related"><a href="#lesson/${q.lessonId}">回到相关课程，补齐原理 ↗</a><a href="#practice/${q.taskId}">把判断带到实拍，记录一次对照 →</a></div></div><div class="vp-actions"><button type="button" data-vp-action="retry">重新判断这题</button><button type="button" data-vp-action="next">${cursor === order.length - 1 ? '查看这一轮总结' : '下一题'} →</button></div>`}</section>
+        <div class="vp-evidence"><figure>${asset ? `<a class="vp-full-image" href="${escape(asset.src)}" target="_blank" rel="noopener" aria-label="在新标签页查看完整照片"><img src="${escape(asset.src)}" alt="${escape(asset.alt)}" loading="eager" decoding="async"></a><div class="vp-image-status" role="status"><p>正在载入照片，完整显示后再开始判断…</p></div><figcaption><strong>照片观察 · 来源见下</strong><span>${escape(asset.title)}</span><span>摄影 / ${escape(asset.author)} · <a href="${escape(asset.source)}" target="_blank" rel="noopener noreferrer">来源</a> · <a href="${escape(asset.licenseUrl)}" target="_blank" rel="noopener noreferrer">${escape(asset.license)}</a></span></figcaption>` : '<div class="vp-missing"><p>这道题的照片尚未加载。</p><p>请确认项目 assets 文件夹与 media.js 完整，再开始判断。</p></div>'}</figure><div class="vp-observe"><span>① 先看哪里</span><p>${escape(q.look)}</p></div>${asset?.note ? `<p class="vp-media-note">素材说明：${escape(asset.note)}</p>` : ''}</div>
+        <section class="vp-decision" aria-labelledby="vp-question-title"><div class="vp-kicker">② 先做判断 / ${cursor + 1} · ${questions.length}</div><h2 id="vp-question-title" tabindex="-1">${escape(q.question)}</h2><p class="vp-predict">先在心里说出理由，再选择。照片能证明什么，也要与照片不能证明的事情分开。</p><div class="vp-options" role="group" aria-label="选择你的判断">${q.options.map((text, i) => `<button type="button" class="vp-option ${selected === i ? 'is-selected' : ''} ${checked && i === q.answer ? 'is-correct' : ''} ${checked && selected === i && i !== q.answer ? 'is-wrong' : ''}" data-vp-answer="${i}" aria-pressed="${selected === i}" ${checked || imageState !== 'ready' ? 'disabled' : ''}><span>${String.fromCharCode(65 + i)}</span>${escape(text)}${checked && i === q.answer ? '<b>正确判断</b>' : ''}</button>`).join('')}</div>${!checked ? `<button type="button" class="vp-check" data-vp-action="check" ${selected === null || imageState !== 'ready' ? 'disabled' : ''}>验证我的判断 →</button><p class="vp-status">${selected === null ? '选择后再查看解释，不急着揭晓。' : '已经选择，试着再说一句“因为我看到了……”'}</p>` : `<div class="vp-feedback ${selected === q.answer ? 'is-good' : 'needs-work'}" role="status"><strong>${selected === q.answer ? '✓ 判断正确，接着核对证据。' : '↻ 再观察一下，问题出在判断依据。'}</strong><h3>③ 回到照片找证据</h3><p>${escape(q.evidence)}</p><h3>下次拍摄怎么用</h3><p>${escape(q.transfer)}</p><div class="vp-related"><a href="#lesson/${q.lessonId}">回到相关课程，补齐原理 ↗</a><a href="#practice/${q.taskId}">把判断带到实拍，记录一次对照 →</a></div></div><div class="vp-actions"><button type="button" data-vp-action="retry">重新判断这题</button><button type="button" data-vp-action="next">${cursor === order.length - 1 ? '查看这一轮总结' : '下一题'} →</button></div>`}</section>
       </div></section>`;
+    const image = host.querySelector('.vp-full-image img');
+    if (image?.complete) imageState = image.naturalWidth > 0 ? 'ready' : 'error';
+    updateImageStatus();
   }
 
   function handleClick(event) {
     const jump = event.target.closest('[data-vp-jump]');
     if (jump) { cursor = Number(jump.dataset.vpJump); selected = null; checked = false; render(); focusQuestion(); return; }
     const choice = event.target.closest('[data-vp-answer]');
-    if (choice && !checked) {
+    if (choice && !checked && imageState === 'ready') {
       selected = Number(choice.dataset.vpAnswer);
-      render();
+      updateChoices();
       host.querySelector(`[data-vp-answer="${selected}"]`)?.focus({ preventScroll: true });
       return;
     }
     const action = event.target.closest('[data-vp-action]')?.dataset.vpAction;
     if (action === 'check' && selected !== null && !checked) {
       const q = order[cursor];
-      if (!getAsset(q)) return;
+      if (!getAsset(q) || imageState !== 'ready') return;
       checked = true;
       const correct = selected === q.answer;
       results[q.id] = correct;
       onResult({ id: q.id, correct, lessonId: q.lessonId });
       render();
       host.querySelector('.vp-feedback')?.scrollIntoView({ block: 'nearest' });
+    } else if (action === 'reload-photo') {
+      render(); focusQuestion();
     } else if (action === 'retry') {
       selected = null; checked = false; render(); focusQuestion();
     } else if (action === 'next') {
@@ -195,6 +237,7 @@
   }
 
   function renderSummary() {
+    imageState = 'missing';
     const correct = questions.filter(q => results[q.id] === true).length;
     const wrong = questions.filter(q => results[q.id] === false);
     const unanswered = questions.filter(q => results[q.id] === undefined).length;

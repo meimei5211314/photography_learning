@@ -12,20 +12,41 @@ const practice = context.window.PhotoPractice;
 const data = context.window.PHOTO_DATA;
 const media = context.window.PHOTO_MEDIA;
 
-function host() {
-  let click = null;
-  const node = { focus() {}, scrollIntoView() {} };
+function host(initialImage = 'ready') {
+  const listeners = new Map();
+  let html = '', image = null, choices = [], check = null;
+  const node = () => ({ focus() {}, scrollIntoView() {}, setAttribute() {}, classList: { toggle() {} } });
+  const notice = node(), status = node();
   return {
-    innerHTML: '',
-    addEventListener(name, callback, options) {
-      if (name === 'click') click = callback;
-      options.signal.addEventListener('abort', () => { click = null; }, { once: true });
+    get innerHTML() { return html; },
+    set innerHTML(value) {
+      html = value;
+      image = value.includes('class="vp-full-image"') ? { complete: initialImage !== 'loading', naturalWidth: initialImage === 'ready' ? 1200 : 0 } : null;
+      choices = [...value.matchAll(/data-vp-answer="(\d+)"/g)].map(match => ({ ...node(), dataset: { vpAnswer: match[1] } }));
+      check = value.includes('data-vp-action="check"') ? node() : null;
     },
-    querySelector() { return node; },
+    get image() { return image; },
+    addEventListener(name, callback, options) {
+      listeners.set(name, callback);
+      options.signal.addEventListener('abort', () => { listeners.delete(name); }, { once: true });
+    },
+    querySelector(selector) {
+      if (selector === '.vp-full-image img') return image;
+      if (selector === '.vp-image-status') return image ? notice : null;
+      if (selector === '[data-vp-action="check"]') return check;
+      if (selector === '.vp-status') return status;
+      return node();
+    },
+    querySelectorAll(selector) { return selector === '[data-vp-answer]' ? choices : []; },
+    imageEvent(type, target = image) {
+      target.complete = true;
+      target.naturalWidth = type === 'load' ? 1200 : 0;
+      listeners.get(type)?.({ type, target });
+    },
     act(kind, value) {
       const property = { jump: 'vpJump', answer: 'vpAnswer', action: 'vpAction' }[kind];
       const expected = { jump: '[data-vp-jump]', answer: '[data-vp-answer]', action: '[data-vp-action]' }[kind];
-      click?.({ target: { closest: selector => selector === expected ? { dataset: { [property]: String(value) } } : null } });
+      listeners.get('click')?.({ target: { closest: selector => selector === expected ? { dataset: { [property]: String(value) } } : null } });
     }
   };
 }
@@ -48,6 +69,71 @@ test('visual practice preserves all legacy ids and covers every specialty photo 
     assert.equal(new Set(q.options).size, q.options.length);
     assert.ok(Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length);
   }
+});
+
+test('photograph bytes must load before choosing or recording a result; selection preserves the image', () => {
+  const container = host('loading'), records = [], q = practice.questions[0];
+  practice.mount(container, { onResult: result => records.push(result) });
+  const image = container.image;
+  assert.ok(container.querySelectorAll('[data-vp-answer]').every(button => button.disabled));
+  container.act('answer', q.answer);
+  container.act('action', 'check');
+  assert.equal(records.length, 0);
+  container.imageEvent('load');
+  assert.ok(container.querySelectorAll('[data-vp-answer]').every(button => !button.disabled));
+  assert.equal(container.querySelector('[data-vp-action="check"]').disabled, true, 'loading-time input was discarded');
+  container.act('answer', q.answer);
+  assert.equal(container.image, image, 'choosing must not reload the photograph');
+  container.act('action', 'check');
+  assert.equal(records.length, 1);
+  practice.destroy();
+});
+
+test('broken image requests remain unscored and can be retried after recovery', () => {
+  const container = host('loading'), records = [], q = practice.questions[0];
+  practice.mount(container, { onResult: result => records.push(result) });
+  const failed = container.image;
+  container.imageEvent('error');
+  assert.match(container.querySelector('.vp-image-status').innerHTML, /重新加载照片/);
+  container.act('answer', q.answer);
+  container.act('action', 'check');
+  assert.equal(records.length, 0);
+  container.act('action', 'reload-photo');
+  assert.notEqual(container.image, failed);
+  container.imageEvent('load', failed);
+  assert.ok(container.querySelectorAll('[data-vp-answer]').every(button => button.disabled), 'old attempt cannot unlock retry');
+  container.imageEvent('load');
+  container.act('answer', q.answer);
+  container.act('action', 'check');
+  assert.equal(records.length, 1);
+  practice.destroy();
+});
+
+test('late image events cannot change a different question or an unmounted view', () => {
+  const container = host('loading'), records = [];
+  practice.mount(container, { onResult: result => records.push(result) });
+  const previous = container.image;
+  container.act('jump', 1);
+  container.imageEvent('load', previous);
+  assert.ok(container.querySelectorAll('[data-vp-answer]').every(button => button.disabled));
+  container.imageEvent('load');
+  container.imageEvent('error', previous);
+  assert.ok(container.querySelectorAll('[data-vp-answer]').every(button => !button.disabled));
+  practice.destroy();
+  container.imageEvent('error');
+  container.act('answer', 0);
+  container.act('action', 'check');
+  assert.equal(records.length, 0);
+});
+
+test('a cached image decode failure also blocks grading without needing a new error event', () => {
+  const container = host('error'), records = [];
+  practice.mount(container, { onResult: result => records.push(result) });
+  assert.match(container.querySelector('.vp-image-status').innerHTML, /照片未能加载/);
+  container.act('answer', 1);
+  container.act('action', 'check');
+  assert.equal(records.length, 0);
+  practice.destroy();
 });
 
 test('recent errors are first, answers must be checked, and double-checking does not resave', () => {

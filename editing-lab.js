@@ -41,13 +41,25 @@
   }
   function destroy() { aborter?.abort(); host = null; aborter = null; state = null; }
   function imageLoaded(event) {
-    if (event.target.tagName === 'IMG') event.target.closest('.edit-photo-stage')?.classList.add('edit-loaded');
+    if (event.target.tagName !== 'IMG' || !host?.contains(event.target)) return;
+    updateImageStage(event.target.closest('.edit-photo-stage'));
   }
   function imageFailed(event) {
-    if (event.target.tagName !== 'IMG') return;
-    const stage = event.target.closest('.edit-photo-stage'); stage?.classList.remove('edit-loaded');
+    if (event.target.tagName !== 'IMG' || !host?.contains(event.target)) return;
+    event.target.dataset.imageFailed = 'true';
+    updateImageStage(event.target.closest('.edit-photo-stage'));
+  }
+  function updateImageStage(stage) {
+    if (!stage || !host?.contains(stage)) return;
+    const images = [...stage.querySelectorAll('img')];
+    const failed = !images.length || images.some(img => img.dataset.imageFailed === 'true' || (img.complete && !img.naturalWidth));
+    const ready = !failed && images.every(img => img.complete && img.naturalWidth > 0);
+    stage.classList.toggle('edit-loaded', ready);
+    stage.setAttribute('aria-busy', String(!ready && !failed));
     const notice = stage?.querySelector('.edit-image-status');
-    if (notice) notice.textContent = '照片未能加载，请确认 assets 文件夹完整。下方后期顺序练习仍可使用。';
+    if (notice) notice.textContent = failed ? '照片未能完整加载，请确认 assets 文件夹完整，或恢复连接后重试。下方后期顺序练习仍可使用。' : '正在载入全部对比照片…';
+    const retry = q('[data-action="reload-photo"]');
+    if (retry) retry.hidden = !failed;
   }
   function button(text, attrs = '') { return `<button type="button" class="edit-button" ${attrs}>${text}</button>`; }
   function control(id, label, min, max, step, low, high, hint) {
@@ -60,13 +72,13 @@
     const a = assets()[state.scene], choices = available();
     host.innerHTML = `<section class="edit-root" aria-label="摄影后期学习工作台"><div class="edit-intro"><div><span class="edit-eyebrow">观察原片 → 明确目标 → 少量调整 → 前后核对</span><h2>后期，让照片更接近你的想法。</h2><p>一次只改一个参数。先说出想改善什么，再判断这次改动是否真的有帮助。</p></div><span class="edit-mode-label">JPEG 屏幕练习</span></div><div class="edit-boundary"><strong>这里练判断，不模拟完整 RAW 处理器。</strong><p>曝光是显示亮度处理，冷暖是简化色彩覆盖。没有 RAW / CR3 解码、局部蒙版、真实高光恢复或文件导出，也不会修改原片。</p></div>
       <div class="edit-source-row"><div class="edit-scene-buttons" role="group" aria-label="选择练习照片">${choices.map(id => button(sceneNames[id], `data-scene="${id}" aria-pressed="${state.scene === id}"`)).join('')}</div>${button('↺ 重置全部调整', 'data-action="reset"')}</div>
-      <div class="edit-workspace"><div class="edit-visual">${a ? `<div class="edit-photo-stage" style="--edit-ratio:${a.width / a.height || 1.5}" role="img" aria-label="同一张照片的前后对比，左侧原图、右侧调整图，拖动照片或下方滑杆改变分界"><div class="edit-photo-layer edit-after"><img id="edit-adjusted-image" src="${esc(a.src)}" alt="${esc(a.alt)}，当前调整版本" width="${a.width || 1600}" height="${a.height || 1067}" decoding="async" draggable="false"><div class="edit-warmth" id="edit-warmth-overlay"></div></div><div class="edit-photo-layer edit-before" id="edit-before"><img src="${esc(a.src)}" alt="${esc(a.alt)}，原片参照" width="${a.width || 1600}" height="${a.height || 1067}" decoding="async" draggable="false"></div><span class="edit-picture-label edit-original-label">原图</span><span class="edit-picture-label edit-adjusted-label">调整图</span><div class="edit-divider" id="edit-divider"><span>↔</span></div><span class="edit-image-status">正在载入照片…</span></div><div class="edit-compare-controls"><label for="edit-reveal">拖动分界，核对改变 <output id="edit-value-reveal" for="edit-reveal"></output></label><input id="edit-reveal" type="range" min="0" max="100" step="1" value="${state.reveal}" data-edit="reveal"><div class="edit-compare-buttons">${button('只看原图', 'data-view="100"')}${button('各看一半', 'data-view="50"')}${button('只看调整图', 'data-view="0"')}</div></div>${credit(a)}` : '<div class="edit-missing"><h3>本地照片暂不可用</h3><p>请确认 PHOTO_MEDIA 已先于后期工作台加载，或先完成下方的后期顺序练习。</p></div>'}<div class="edit-feedback" aria-live="polite"><span>当前调整的含义</span><p id="edit-live-feedback"></p></div></div>
+      <div class="edit-workspace"><div class="edit-visual">${a ? `<div class="edit-photo-stage" tabindex="-1" style="--edit-ratio:${a.width / a.height || 1.5}" role="img" aria-label="同一张照片的前后对比，左侧原图、右侧调整图，拖动照片或下方滑杆改变分界"><div class="edit-photo-layer edit-after"><img id="edit-adjusted-image" src="${esc(a.src)}" alt="${esc(a.alt)}，当前调整版本" width="${a.width || 1600}" height="${a.height || 1067}" decoding="async" draggable="false"><div class="edit-warmth" id="edit-warmth-overlay"></div></div><div class="edit-photo-layer edit-before" id="edit-before"><img src="${esc(a.src)}" alt="${esc(a.alt)}，原片参照" width="${a.width || 1600}" height="${a.height || 1067}" decoding="async" draggable="false"></div><span class="edit-picture-label edit-original-label">原图</span><span class="edit-picture-label edit-adjusted-label">调整图</span><div class="edit-divider" id="edit-divider"><span>↔</span></div><span class="edit-image-status">正在载入照片…</span></div>${button('重新加载照片', 'data-action="reload-photo" hidden')}<div class="edit-compare-controls"><label for="edit-reveal">拖动分界，核对改变 <output id="edit-value-reveal" for="edit-reveal"></output></label><input id="edit-reveal" type="range" min="0" max="100" step="1" value="${state.reveal}" data-edit="reveal"><div class="edit-compare-buttons">${button('只看原图', 'data-view="100"')}${button('各看一半', 'data-view="50"')}${button('只看调整图', 'data-view="0"')}</div></div>${credit(a)}` : '<div class="edit-missing"><h3>本地照片暂不可用</h3><p>请确认 PHOTO_MEDIA 已先于后期工作台加载，或先完成下方的后期顺序练习。</p></div>'}<div class="edit-feedback" aria-live="polite"><span>当前调整的含义</span><p id="edit-live-feedback"></p></div></div>
       <aside class="edit-controls" aria-label="后期调整参数"><h3>先小幅度，再做比较</h3>${control('exposure','曝光（显示亮度）',-1.5,1.5,.1,'−1.5 EV','+1.5 EV','增加亮度不等于恢复传感器没记录下来的细节。')}${control('contrast','对比',70,130,1,'更柔和','更强烈','观察明暗关系；高对比可能让阴影与亮部更难分辨。')}${control('saturation','饱和',0,150,1,'无彩色','更鲜艳','颜色更多、更浓，不代表表达更好。留意肤色和主色。')}${control('warmth','冷暖倾向',-50,50,1,'偏冷','偏暖','以原片为零点，不把数值当作相机 K 值或准确白平衡。')}<div class="edit-preset-row"><span>体验一次调整，再说出取舍</span>${button('轻量示例', 'data-action="subtle"')}${button('查看过度调整示例', 'data-action="excessive"')}</div></aside></div>
       <section class="edit-goal"><div><span class="edit-eyebrow">带着目标观察</span><h3>你希望这次调整解决什么？</h3><label for="edit-goal">选择观察目标</label><select id="edit-goal">${Object.entries(GOALS).map(([id,g]) => `<option value="${id}" ${state.goal === id?'selected':''}>${g.title}</option>`).join('')}</select><p id="edit-goal-prompt"></p></div><div class="edit-goal-check"><h4>对照原片，问自己两个问题</h4><ol><li>主角更容易被看见了吗？</li><li>有没有为了一个变化，牺牲重要的细节或自然感？</li></ol>${button('检查我的调整思路', 'data-action="inspect"')}<p id="edit-goal-feedback" class="edit-goal-feedback" aria-live="polite"></p></div></section>
       <section class="edit-workflow"><div class="edit-section-head"><div><span class="edit-eyebrow">主动回忆 / 不看答案排一次</span><h3>把后期步骤连成一条路。</h3><p>这是适合入门的检查顺序，不是软件强制规则。真实编辑可以来回调整；每一步都要有理由。</p></div>${button('重新练一次', 'data-action="restart-order"')}</div><div id="edit-workflow-progress" class="edit-workflow-progress" aria-label="已选择的后期顺序"></div><div id="edit-workflow-options" class="edit-workflow-options"></div><p class="edit-order-feedback" id="edit-order-feedback" aria-live="polite"></p><details class="edit-workflow-answer"><summary>需要提示？查看完整流程与每步目的</summary><ol>${WORKFLOW.map(item => `<li><strong>${item.title}</strong><p>${item.why}</p></li>`).join('')}</ol></details></section>
       <section class="edit-takeaway"><div><h3>RAW 有余地，拍摄仍要到位。</h3><p>RAW 通常让白平衡与明暗调整更灵活，但不能保证修复严重失焦、主体拖影或真正丢失的高光。拍摄时先对准焦点、选择合适快门，并检查重要高光。</p><a href="#lesson/editing-basic">学习完整后期流程 →</a></div><div><h3>把今天的练习，带到自己的作品。</h3><p>选 3 张同一组照片，先统一基本亮度与颜色，再逐张检查主体。隔天不看调整记录，说出每张“为什么改、改了什么、保留了什么”。</p><a href="#lesson/editing-portrait">继续学习人像后期 →</a></div></section></section>`;
     update(); renderOrder();
-    host.querySelectorAll('img').forEach(img => { if (img.complete && img.naturalWidth) img.closest('.edit-photo-stage')?.classList.add('edit-loaded'); });
+    updateImageStage(q('.edit-photo-stage'));
   }
   function update() {
     const image = q('#edit-adjusted-image');
@@ -128,6 +140,7 @@
       renderOrder(); const next=host.querySelector('[data-order]:not(:disabled)'); next?.focus({preventScroll:true}); return;
     }
     const action=buttonNode.dataset.action;
+    if(action==='reload-photo'){render();q('.edit-photo-stage')?.focus({preventScroll:true});return;}
     if(action==='reset'){state.exposure=0;state.contrast=100;state.saturation=100;state.warmth=0;state.reveal=50;state.inspected=false;syncControls();update();}
     if(action==='subtle'){state.exposure=.2;state.contrast=105;state.saturation=104;state.warmth=8;state.reveal=50;syncControls();update();}
     if(action==='excessive'){state.exposure=1.3;state.contrast=130;state.saturation=145;state.warmth=45;state.reveal=50;state.inspected=true;syncControls();update();}
